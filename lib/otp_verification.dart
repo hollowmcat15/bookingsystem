@@ -54,16 +54,36 @@ class _OTPVerificationPageState extends State<OTPVerificationPage> {
         });
       }
 
-      print("✅ OTP verified! Redirecting to login...");
-
-      Future.delayed(Duration(seconds: 1), () {
-        if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            '/login',
-            (Route<dynamic> route) => false,
-          );
-        }
-      });
+      print("✅ OTP verified! User data stored successfully.");
+      
+      // Sign out the user after successful verification to prevent auto-redirect
+      await supabase.auth.signOut();
+      
+      if (mounted) {
+        // Show success dialog instead of automatic redirection
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (BuildContext context) {
+            return AlertDialog(
+              title: Text("Success"),
+              content: Text("Your account has been created successfully!"),
+              actions: [
+                ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(); // Close dialog
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/login',
+                      (Route<dynamic> route) => false,
+                    );
+                  },
+                  child: Text("Go to Login"),
+                ),
+              ],
+            );
+          },
+        );
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Invalid OTP: $e")),
@@ -98,4 +118,3 @@ class _OTPVerificationPageState extends State<OTPVerificationPage> {
     );
   }
 }
-

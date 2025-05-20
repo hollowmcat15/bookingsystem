@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.example.booking_sys.app-mergeDebugResources-40:/values-land/values-land.xml",
+            "outputFile": "com.example.booking_sys.app-mergeDebugResources-41:/values-land/values-land.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\6ddfe7bc5a026c54878de2bc1391ef46\\transformed\\appcompat-1.1.0\\res\\values-land\\values-land.xml",
+                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\772e2867940e4356072472f7dc271176\\transformed\\appcompat-1.1.0\\res\\values-land\\values-land.xml",
                     "from": {
                         "startLines": "2,3,4",
                         "startColumns": "4,4,4",

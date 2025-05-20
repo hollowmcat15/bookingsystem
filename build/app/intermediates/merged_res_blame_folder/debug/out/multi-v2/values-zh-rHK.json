@@ -1,44 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.example.booking_sys.app-mergeDebugResources-40:/values-zh-rHK/values-zh-rHK.xml",
+            "outputFile": "com.example.booking_sys.app-mergeDebugResources-41:/values-zh-rHK/values-zh-rHK.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\889ae3adf7a24645889ee22f4dad2cac\\transformed\\core-1.13.1\\res\\values-zh-rHK\\values-zh-rHK.xml",
-                    "from": {
-                        "startLines": "2,3,4,5,6,7,8,9",
-                        "startColumns": "4,4,4,4,4,4,4,4",
-                        "startOffsets": "55,147,246,340,434,527,620,716",
-                        "endColumns": "91,98,93,93,92,92,95,100",
-                        "endOffsets": "142,241,335,429,522,615,711,812"
-                    },
-                    "to": {
-                        "startLines": "29,30,31,32,33,34,35,45",
-                        "startColumns": "4,4,4,4,4,4,4,4",
-                        "startOffsets": "2666,2758,2857,2951,3045,3138,3231,4110",
-                        "endColumns": "91,98,93,93,92,92,95,100",
-                        "endOffsets": "2753,2852,2946,3040,3133,3226,3322,4206"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\7f6d20225ac1174a3efad96609161b97\\transformed\\browser-1.8.0\\res\\values-zh-rHK\\values-zh-rHK.xml",
-                    "from": {
-                        "startLines": "2,3,4,5",
-                        "startColumns": "4,4,4,4",
-                        "startOffsets": "55,138,230,331",
-                        "endColumns": "82,91,100,92",
-                        "endOffsets": "133,225,326,419"
-                    },
-                    "to": {
-                        "startLines": "37,39,40,41",
-                        "startColumns": "4,4,4,4",
-                        "startOffsets": "3393,3557,3649,3750",
-                        "endColumns": "82,91,100,92",
-                        "endOffsets": "3471,3644,3745,3838"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\6ddfe7bc5a026c54878de2bc1391ef46\\transformed\\appcompat-1.1.0\\res\\values-zh-rHK\\values-zh-rHK.xml",
+                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\772e2867940e4356072472f7dc271176\\transformed\\appcompat-1.1.0\\res\\values-zh-rHK\\values-zh-rHK.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4",
@@ -55,7 +21,7 @@
                     }
                 },
                 {
-                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\047aa7ddff6241681155a5178fa0e58d\\transformed\\preference-1.2.1\\res\\values-zh-rHK\\values-zh-rHK.xml",
+                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\ffe8c5202c8aee5e22f6886f6465e53a\\transformed\\preference-1.2.1\\res\\values-zh-rHK\\values-zh-rHK.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8",
                         "startColumns": "4,4,4,4,4,4,4",
@@ -69,6 +35,40 @@
                         "startOffsets": "3327,3476,3843,3913,4211,4379,4458",
                         "endColumns": "65,80,69,118,167,78,75",
                         "endOffsets": "3388,3552,3908,4027,4374,4453,4529"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\47a3d3d808bdabe9e0d6e5500da6f30d\\transformed\\browser-1.8.0\\res\\values-zh-rHK\\values-zh-rHK.xml",
+                    "from": {
+                        "startLines": "2,3,4,5",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "55,138,230,331",
+                        "endColumns": "82,91,100,92",
+                        "endOffsets": "133,225,326,419"
+                    },
+                    "to": {
+                        "startLines": "37,39,40,41",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "3393,3557,3649,3750",
+                        "endColumns": "82,91,100,92",
+                        "endOffsets": "3471,3644,3745,3838"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\59cf662b2b8d845940ff382134f3256f\\transformed\\core-1.13.1\\res\\values-zh-rHK\\values-zh-rHK.xml",
+                    "from": {
+                        "startLines": "2,3,4,5,6,7,8,9",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "55,147,246,340,434,527,620,716",
+                        "endColumns": "91,98,93,93,92,92,95,100",
+                        "endOffsets": "142,241,335,429,522,615,711,812"
+                    },
+                    "to": {
+                        "startLines": "29,30,31,32,33,34,35,45",
+                        "startColumns": "4,4,4,4,4,4,4,4",
+                        "startOffsets": "2666,2758,2857,2951,3045,3138,3231,4110",
+                        "endColumns": "91,98,93,93,92,92,95,100",
+                        "endOffsets": "2753,2852,2946,3040,3133,3226,3322,4206"
                     }
                 }
             ]

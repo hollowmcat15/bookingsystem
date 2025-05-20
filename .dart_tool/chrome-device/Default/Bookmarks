@@ -3,7 +3,7 @@
    "roots": {
       "bookmark_bar": {
          "children": [  ],
-         "date_added": "13384409636147584",
+         "date_added": "13391137077993170",
          "date_last_used": "0",
          "date_modified": "0",
          "guid": "0bc5d13f-2cba-5d74-951f-3f233fe6c908",
@@ -28,7 +28,7 @@
             "url": "https://oasis.decart.ai/starting-point?journey=Village+Outpost",
             "visit_count": 1
          } ],
-         "date_added": "13384409636147586",
+         "date_added": "13391137077993172",
          "date_last_used": "0",
          "date_modified": "13375022187546209",
          "guid": "82b081ec-3dd3-529c-8475-ab6c344590dd",
@@ -39,7 +39,7 @@
       },
       "synced": {
          "children": [  ],
-         "date_added": "13384409636147587",
+         "date_added": "13391137077993180",
          "date_last_used": "0",
          "date_modified": "0",
          "guid": "4cf2e351-0e85-532b-bb37-df045d8f8d0f",
@@ -49,6 +49,6 @@
          "type": "folder"
       }
    },
-   "sync_metadata": "CjEKDgiIgQISCKf/u+ySAQAAEgAqGENtc3FXcWxNV2hDSU5GL2prVGp2ZUE9PUgDoAYHEqwBCAYSpwEKHHpmNXpiMzhzWmhhN0tzMGVUeG50cGVqSzNKMD0SJDNkMDJmYjQwLTU2YmMtNDRlOS1iM2E2LTRmMDc3ZjZlMzkxORgAIAAoADCm/+/lrjI4zYHw5a4yQM2B8OWuMkocZVF3Q3pxcGRqMzlBNy9tbUJTbkw3anN6blFZPVoeIhxwbDVsVnplUDNSWU1QMW1FRDVURzYwVUdPMFk9ZYq3jTnCPgJgBRKOAQgBEokBChx5eEovNmZ2a2VjcjdrcDVFUXpCNHRXTHBkYkU9EiQ2MjQ2YjZmZS1kOGQ0LTU3NmEtOTExNS03OTIxNWJhNDkyNTcYACAAKAAw/erw968wOKr25OTrL0Cq9uTk6y9KHGFSQ1dMZ2hGOWI1SW5xS0lEdnVKL2p2UWtGYz1aAGUAAAAAwj4CYAASjgEIAhKJAQocWWNTVG9udkVTUHdxQ3M0TDJjclZodjY4TDk4PRIkYmYwZDkwOGQtNTQ2OC01MmRmLWJlYWQtZmY5Y2VhNjFlZjU2GAAgACgAMP3q8PevMDjK9uTk6y9Ayvbk5OsvShxvUFZraHdCUmJWNjVLQ1dSMitJT05IV29PdTg9WgBlAAAAAMI+AmAAEo4BCAMSiQEKHG5qZ0R1ODhlQ3J2WHA4NnBEN2ZIR2NxRnA4OD0SJDVjZjg3YmQxLWM0NTgtNTc3Yi05NzI5LWFkNzhmYzJhOTg4ZRgAIAAoADD96vD3rzA4iPfk5OsvQIj35OTrL0oceXpOQjAxY241NEE3Y1JVMHVUKy9QZ21UdFVvPVoAZQAAAADCPgJgADAAOAA=",
+   "sync_metadata": "CkEKHgiIgQISCKwwPa2WAQAAKg4QABgBIAAoBjAAOABAABIAKhhtc2c5TTdMOTRJZmhMZFJka3pMVUtRPT1IA6AGDBKsAQgGEqcBChx6ZjV6YjM4c1poYTdLczBlVHhudHBlakszSjA9EiQzZDAyZmI0MC01NmJjLTQ0ZTktYjNhNi00ZjA3N2Y2ZTM5MTkYACAAKAAwpv/v5a4yOM2B8OWuMkDNgfDlrjJKHGVRd0N6cXBkajM5QTcvbW1CU25MN2pzem5RWT1aHiIccGw1bFZ6ZVAzUllNUDFtRUQ1VEc2MFVHTzBZPWWKt405wj4CYAUSjgEIARKJAQoceXhKLzZmdmtlY3I3a3A1RVF6QjR0V0xwZGJFPRIkNjI0NmI2ZmUtZDhkNC01NzZhLTkxMTUtNzkyMTViYTQ5MjU3GAAgACgAMP3q8PevMDiq9uTk6y9Aqvbk5OsvShxhUkNXTGdoRjliNUlucUtJRHZ1Si9qdlFrRmM9WgBlAAAAAMI+AmAAEo4BCAISiQEKHFljU1RvbnZFU1B3cUNzNEwyY3JWaHY2OEw5OD0SJGJmMGQ5MDhkLTU0NjgtNTJkZi1iZWFkLWZmOWNlYTYxZWY1NhgAIAAoADD96vD3rzA4yvbk5OsvQMr25OTrL0ocb1BWa2h3QlJiVjY1S0NXUjIrSU9OSFdvT3U4PVoAZQAAAADCPgJgABKOAQgDEokBChxuamdEdTg4ZUNydlhwODZwRDdmSEdjcUZwODg9EiQ1Y2Y4N2JkMS1jNDU4LTU3N2ItOTcyOS1hZDc4ZmMyYTk4OGUYACAAKAAw/erw968wOIj35OTrL0CI9+Tk6y9KHHl6TkIwMWNuNTRBN2NSVTB1VCsvUGdtVHRVbz1aAGUAAAAAwj4CYAAwADgA",
    "version": 1
 }

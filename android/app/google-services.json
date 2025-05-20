@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "350732307229",
+    "project_id": "panglaoserenity",
+    "storage_bucket": "panglaoserenity.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:350732307229:android:1a8bc4a925fa5040792ff4",
+        "android_client_info": {
+          "package_name": "com.example.booking_sys"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBxVsfltiLfRYxHvBYrTxy_-ZM1_UnllTQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

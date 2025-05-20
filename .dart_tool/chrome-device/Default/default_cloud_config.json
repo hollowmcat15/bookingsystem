@@ -70,21 +70,21 @@
    }, {
       "appName": "reading_view",
       "data": {
-         "blockList": [ "jreast.co.jp", "marriott.com", "eki-net.com", "wanbishi.ne.jp", "instana.io", "ford.com", "login.ford", "login.lincoln" ],
+         "blockList": [ "jreast.co.jp", "marriott.com", "eki-net.com", "wanbishi.ne.jp", "instana.io", "ford.com", "login.ford", "login.lincoln", "m4-ssd.com", "x.com", "dailykos.com", "gg.deals", "chinatimes.com", "edisoncareers.com", "foliosociety.com", "blood.co.uk", "techcommunity.microsoft.com", "aatyu.livedoor.blog", "google.com", "pctuning.cz", "resetera.com", "youtube.com", "biccamera.com", "audioholics.com", "quizknock.com", "neteasegames.com", "bing.com", "pbs.org" ],
          "textLengthThreshold": 40,
          "whiteList": [ "mip.shengxuxu.com" ]
       },
       "effectStrategy": "realtime",
       "type": "normal",
-      "version": "1008"
+      "version": "1011"
    }, {
       "appId": "idcfwggqzmnqmjrrncznqaggwhcxbjof",
       "appName": "beta_enrollment",
       "data": {
-         "enable": true,
+         "enable": false,
          "inhouse_entry_enabled": true,
          "inhouse_upsell_enabled": true,
-         "testflight_entry_enabled": true
+         "testflight_entry_enabled": false
       },
       "effectStrategy": "launch",
       "instanceId": "bzatjpaqglyyxiaqtufvrwcynulkjazt",
@@ -219,14 +219,14 @@
       "appId": "a3f5b7c9d1e2f4a6b8c7d9e1f2a3b4d6",
       "appName": "topsites",
       "data": {
-         "latestOperationVersion": "2.12",
-         "latestOperationVersionForTesting": "2.12",
+         "latestOperationVersion": "2.13",
+         "latestOperationVersionForTesting": "2.13",
          "topSitesV2Enabled": false
       },
       "effectStrategy": "launch",
       "instanceId": "3e7a9c4b1f8d6e5c2a9b7e4d1c8f3e7b",
       "type": "normal",
-      "version": "1020"
+      "version": "1022"
    }, {
       "appId": "71146be72c1663fbeca572989b494b56",
       "appName": "shared_links",
@@ -270,26 +270,34 @@
       "data": {
          "campaigns": [ {
             "campaignId": 1,
-            "description": "Growth Engine demo campaign",
-            "enabled": false,
+            "description": "Growth Engine demo campaign for Android",
+            "enabled": true,
             "surface": {
                "properties": {
-                  "isFullScreen": true,
-                  "pageName": "edgeConfigurableUpsellDemo"
+                  "buttonText": "growth_engine_demo",
+                  "deepLink": "microsoft-edge-x://action/extension-hub?platform=whats_new&source=general",
+                  "image": "microsoft-logo.png",
+                  "imagePath": "microsoft-logo.png",
+                  "isRemote": true,
+                  "primaryActionStringId": "growth_engine_demo",
+                  "subtitleStringId": "growth_engine_demo",
+                  "subtitleText": "growth_engine_demo",
+                  "titleStringId": "growth_engine_demo",
+                  "titleText": "growth_engine_demo"
                },
-               "type": "configurableUpsell"
+               "type": "bottomSheetUpsell"
             },
             "target": {
                "targetAppVersion": {
                   "max": "140.0.0.0",
                   "min": "128.0.0.0"
                },
-               "targetChannel": [ "unknown" ],
+               "targetChannel": [ "unknown", "canary" ],
                "targetDatetime": {
-                  "max": "31 Sep 2024 13:00 GMT",
+                  "max": "1 Sep 2025 13:00 GMT",
                   "min": "1 Sep 2024 13:00 GMT"
                },
-               "targetOS": [ "iOS", "Android" ],
+               "targetOS": [ "Android" ],
                "targetUserProfile": {
                   "growth_engine_debug_user": true
                }
@@ -299,27 +307,36 @@
             }
          }, {
             "campaignId": 2,
-            "description": "Tampermonkey campaign",
+            "description": "Growth Engine demo campaign for iOS",
             "enabled": true,
             "surface": {
                "properties": {
+                  "buttonText": "growth_engine_demo",
+                  "deepLink": "microsoft-edge-x://action/wallpaper-editor",
+                  "image": "microsoft-logo.png",
+                  "imagePath": "microsoft-logo.png",
+                  "isRemote": true,
+                  "primaryActionStringId": "growth_engine_demo",
+                  "subtitleStringId": "growth_engine_demo",
+                  "subtitleText": "growth_engine_demo",
+                  "titleStringId": "growth_engine_demo",
+                  "titleText": "growth_engine_demo"
                },
-               "type": "nativeUpsell"
+               "type": "bottomSheetUpsell"
             },
             "target": {
                "targetAppVersion": {
-                  "max": "145.0.0.0",
-                  "min": "130.0.0.0"
+                  "max": "140.0.0.0",
+                  "min": "128.0.0.0"
                },
-               "targetChannel": [ "unknown", "canary", "stable" ],
+               "targetChannel": [ "unknown", "canary" ],
                "targetDatetime": {
                   "max": "1 Sep 2025 13:00 GMT",
                   "min": "1 Sep 2024 13:00 GMT"
                },
-               "targetOS": [ "Android" ],
+               "targetOS": [ "iOS" ],
                "targetUserProfile": {
-                  "extension_hub_shown": true,
-                  "extension_hub_shown_after_130": false
+                  "growth_engine_debug_user": true
                }
             },
             "trigger": {
@@ -339,7 +356,7 @@
       },
       "effectStrategy": "realtime",
       "type": "builtin",
-      "version": "1003"
+      "version": "1004"
    } ],
-   "version": "202503050001"
+   "version": "202504140001"
 }

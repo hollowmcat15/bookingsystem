@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'signup.dart';
 import 'client_dashboard.dart';
+import 'manager_dashboard.dart';
+import 'therapist_dashboard.dart';
+import 'receptionist_dashboard.dart';  // Import the new receptionist dashboard
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -14,6 +17,8 @@ class _LoginPageState extends State<LoginPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final SupabaseClient supabase = Supabase.instance.client;
+  bool _isLoading = false;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -23,43 +28,130 @@ class _LoginPageState extends State<LoginPage> {
 
   /// ✅ Check if user is already logged in
   void _checkSession() async {
-  final session = supabase.auth.currentSession;
-  
-  if (session?.user != null) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        Navigator.pushReplacementNamed(context, '/dashboard');
-      }
-    });
+    final session = supabase.auth.currentSession;
+
+    if (session?.user != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.pushReplacementNamed(context, '/dashboard');
+        }
+      });
+    }
   }
-}
 
   /// ✅ Handle Login
   void _login() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      final AuthResponse res = await supabase.auth.signInWithPassword(
+      final AuthResponse response = await supabase.auth.signInWithPassword(
         email: _emailController.text.trim(),
-        password: _passwordController.text,
+        password: _passwordController.text.trim(),
       );
 
-      if (res.user != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Login successful!')),
-        );
+      final Session? session = response.session;
+      if (session != null) {
+        final String userId = session.user.id;
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => ClientDashboard()),
-        );
+        // Check if user is a Manager
+        final List<Map<String, dynamic>> managerCheck = await supabase
+            .from('manager')
+            .select()
+            .eq('auth_id', userId);
+
+        if (managerCheck.isNotEmpty) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ManagerDashboard(managerData: managerCheck.first),
+              ),
+            );
+          }
+          return;
+        }
+
+        // Check if user is a Therapist
+        final List<Map<String, dynamic>> therapistCheck = await supabase
+            .from('therapist')
+            .select()
+            .eq('auth_id', userId);
+
+        if (therapistCheck.isNotEmpty) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => TherapistDashboard(therapistData: therapistCheck.first),
+              ),
+            );
+          }
+          return;
+        }
+
+        // Check if user is a Receptionist
+        final List<Map<String, dynamic>> receptionistCheck = await supabase
+            .from('receptionist')
+            .select()
+            .eq('auth_id', userId);
+
+        if (receptionistCheck.isNotEmpty) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ReceptionistDashboard(receptionistData: receptionistCheck.first),
+              ),
+            );
+          }
+          return;
+        }
+
+        // Check if user is a Client
+        final String? userEmail = session?.user.email;
+
+        if (userEmail != null) {  // Ensure userEmail is not null
+          final List<Map<String, dynamic>> clientCheck = await supabase
+              .from('client')
+              .select()
+              .eq('email', userEmail);  // This prevents the nullable error
+
+          if (clientCheck.isNotEmpty) {
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ClientDashboard(),
+                ),
+              );
+            }
+            return;
+          }
+        }
+
+        // No valid role found
+        await supabase.auth.signOut();
+        if (mounted) {
+          setState(() {
+            _errorMessage = "Access denied: No valid role assigned.";
+          });
+        }
       }
-    } on AuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: ${e.message}')),
-      );
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('An unexpected error occurred. Please try again.')),
-      );
+      if (mounted) {
+        setState(() {
+          _errorMessage = "Login failed: ${e.toString()}";
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -72,7 +164,7 @@ class _LoginPageState extends State<LoginPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: <Widget>[
-              Icon(Icons.lock, size: 80, color: Colors.blue), // ✅ Stylish Icon
+              Icon(Icons.lock, size: 80, color: Colors.blue),
               SizedBox(height: 20),
               Text("Welcome!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
               SizedBox(height: 10),
@@ -98,13 +190,31 @@ class _LoginPageState extends State<LoginPage> {
                 obscureText: true,
               ),
               SizedBox(height: 20),
+              if (_errorMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: Text(
+                    _errorMessage!,
+                    style: TextStyle(color: Colors.red),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ElevatedButton(
-                onPressed: _login,
+                onPressed: _isLoading ? null : _login,
                 style: ElevatedButton.styleFrom(
                   padding: EdgeInsets.symmetric(horizontal: 40, vertical: 14),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                child: Text("Log-in", style: TextStyle(fontSize: 18)),
+                child: _isLoading
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : Text("Log-in", style: TextStyle(fontSize: 18)),
               ),
               SizedBox(height: 20),
               TextButton(
@@ -120,5 +230,3 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 }
-
-

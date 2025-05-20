@@ -1,3 +1,18 @@
+buildscript {
+    ext {
+        kotlin_version = '2.1.0'
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+    }
+}
+
+plugins {
+}
+
 allprojects {
     repositories {
         google()
@@ -16,3 +31,4 @@ subprojects {
 tasks.register("clean", Delete) {
     delete rootProject.buildDir
 }
+

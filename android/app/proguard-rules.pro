@@ -1,0 +1,4 @@
+-keep class com.dexterous.** { *; }
+-keep class com.google.firebase.** { *; }
+-dontwarn com.google.firebase.**
+-keep class io.flutter.plugins.** { *; }

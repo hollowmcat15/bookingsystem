@@ -1,10 +1,27 @@
 {
     "logs": [
         {
-            "outputFile": "com.example.booking_sys.app-mergeDebugResources-40:/values-v24/values-v24.xml",
+            "outputFile": "com.example.booking_sys.app-mergeDebugResources-41:/values-v24/values-v24.xml",
             "map": [
                 {
-                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\6ddfe7bc5a026c54878de2bc1391ef46\\transformed\\appcompat-1.1.0\\res\\values-v24\\values-v24.xml",
+                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\ab9363044b7fc8da6a7c438bd8bc51b4\\transformed\\media-1.1.0\\res\\values-v24\\values-v24.xml",
+                    "from": {
+                        "startLines": "2,3,4,5",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "55,121,182,248",
+                        "endColumns": "65,60,65,66",
+                        "endOffsets": "116,177,243,310"
+                    },
+                    "to": {
+                        "startLines": "4,5,6,7",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "347,413,474,540",
+                        "endColumns": "65,60,65,66",
+                        "endOffsets": "408,469,535,602"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\hollowmcat15\\.gradle\\caches\\transforms-3\\772e2867940e4356072472f7dc271176\\transformed\\appcompat-1.1.0\\res\\values-v24\\values-v24.xml",
                     "from": {
                         "startLines": "2,3",
                         "startColumns": "4,4",

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'manage_notifications.dart';
 import 'login.dart';
 import 'client_dashboard.dart';
 import 'signup.dart';
@@ -7,10 +8,26 @@ import 'otp_verification.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize Supabase with realtime options
   await Supabase.initialize(
-    url: 'https://qhqvnyefgqzzwovastnz.supabase.co', // Replace with your Supabase URL
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocXZueWVmZ3F6endvdmFzdG56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkyMzMzMjIsImV4cCI6MjA1NDgwOTMyMn0.vo_S4s4FEdwJPwbkUPEfWvLahX1J26c2erRNCyLjl_Y', // Replace with your Supabase Anon Key
+    url: 'https://qhqvnyefgqzzwovastnz.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFocXZueWVmZ3F6endvdmFzdG56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzkyMzMzMjIsImV4cCI6MjA1NDgwOTMyMn0.vo_S4s4FEdwJPwbkUPEfWvLahX1J26c2erRNCyLjl_Y',
+    realtimeClientOptions: const RealtimeClientOptions(
+      eventsPerSecond: 40,
+    ),
   );
+  
+  // Enable realtime for notifications table
+  final client = Supabase.instance.client;
+  client.channel('public:notification').subscribe();
+
+  // Initialize notifications
+  await NotificationManager.initializeNotifications();
+
+  // Subscribe to notifications
+  NotificationManager.subscribeToNotifications();
+
   runApp(MyApp());
 }
 

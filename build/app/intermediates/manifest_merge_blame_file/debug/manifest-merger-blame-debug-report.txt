@@ -13,163 +13,232 @@
 13         to allow setting breakpoints, to provide hot reload, etc.
 14    -->
 15    <uses-permission android:name="android.permission.INTERNET" />
-15-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\debug\AndroidManifest.xml:6:5-66
-15-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\debug\AndroidManifest.xml:6:22-64
-16    <!--
-17     Required to query activities that can process text, see:
-18         https://developer.android.com/training/package-visibility and
-19         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
-20
-21         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin.
-22    -->
-23    <queries>
-23-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\main\AndroidManifest.xml:39:5-44:15
-24        <intent>
-24-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\main\AndroidManifest.xml:40:9-43:18
-25            <action android:name="android.intent.action.PROCESS_TEXT" />
-25-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\main\AndroidManifest.xml:41:13-72
-25-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\main\AndroidManifest.xml:41:21-70
-26
-27            <data android:mimeType="text/plain" />
-27-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\main\AndroidManifest.xml:42:13-50
-27-->C:\Users\hollowmcat15\Documents\booking_sys\android\app\src\main\AndroidManifest.xml:42:19-48
-28        </intent>
-29    </queries>
-30
-31    <permission
-31-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\889ae3adf7a24645889ee22f4dad2cac\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
-32        android:name="com.example.booking_sys.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-32-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\889ae3adf7a24645889ee22f4dad2cac\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
-33        android:protectionLevel="signature" />
-33-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\889ae3adf7a24645889ee22f4dad2cac\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
-34
-35    <uses-permission android:name="com.example.booking_sys.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
-35-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\889ae3adf7a24645889ee22f4dad2cac\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
-35-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\889ae3adf7a24645889ee22f4dad2cac\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
-36
-37    <application
-38        android:name="android.app.Application"
-39        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
-39-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\889ae3adf7a24645889ee22f4dad2cac\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
-40        android:debuggable="true"
-41        android:extractNativeLibs="true"
-42        android:icon="@mipmap/ic_launcher"
-43        android:label="booking_sys" >
-44        <activity
-45            android:name="com.example.booking_sys.MainActivity"
-46            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-47            android:exported="true"
-48            android:hardwareAccelerated="true"
-49            android:launchMode="singleTop"
-50            android:taskAffinity=""
-51            android:theme="@style/LaunchTheme"
-52            android:windowSoftInputMode="adjustResize" >
-53
-54            <!--
-55                 Specifies an Android theme to apply to this Activity as soon as
-56                 the Android process has started. This theme is visible to the user
-57                 while the Flutter UI initializes. After that, this theme continues
-58                 to determine the Window background behind the Flutter UI.
-59            -->
-60            <meta-data
-61                android:name="io.flutter.embedding.android.NormalTheme"
-62                android:resource="@style/NormalTheme" />
-63
-64            <intent-filter>
-65                <action android:name="android.intent.action.MAIN" />
-66
-67                <category android:name="android.intent.category.LAUNCHER" />
-68            </intent-filter>
-69        </activity>
-70        <!--
-71             Don't delete the meta-data below.
-72             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java
-73        -->
-74        <meta-data
-75            android:name="flutterEmbedding"
-76            android:value="2" />
+15-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:2:5-66
+15-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:2:22-64
+16    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+16-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:3:5-76
+16-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:3:22-74
+17    <uses-permission android:name="android.permission.VIBRATE" />
+17-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:4:5-65
+17-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:4:22-63
+18    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+18-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:5:5-80
+18-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:5:22-78
+19
+20    <queries>
+20-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:72:5-77:15
+21        <intent>
+21-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:73:9-76:18
+22            <action android:name="android.intent.action.PROCESS_TEXT" />
+22-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:74:13-72
+22-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:74:21-70
+23
+24            <data android:mimeType="text/plain" />
+24-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:75:13-50
+24-->C:\Users\hollowmcat15\Documents\booksys\android\app\src\main\AndroidManifest.xml:75:19-48
+25        </intent>
+26    </queries>
+27
+28    <permission
+28-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\59cf662b2b8d845940ff382134f3256f\transformed\core-1.13.1\AndroidManifest.xml:22:5-24:47
+29        android:name="com.example.booking_sys.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+29-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\59cf662b2b8d845940ff382134f3256f\transformed\core-1.13.1\AndroidManifest.xml:23:9-81
+30        android:protectionLevel="signature" />
+30-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\59cf662b2b8d845940ff382134f3256f\transformed\core-1.13.1\AndroidManifest.xml:24:9-44
+31
+32    <uses-permission android:name="com.example.booking_sys.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+32-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\59cf662b2b8d845940ff382134f3256f\transformed\core-1.13.1\AndroidManifest.xml:26:5-97
+32-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\59cf662b2b8d845940ff382134f3256f\transformed\core-1.13.1\AndroidManifest.xml:26:22-94
+33
+34    <application
+35        android:name="android.app.Application"
+36        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+36-->[androidx.core:core:1.13.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\59cf662b2b8d845940ff382134f3256f\transformed\core-1.13.1\AndroidManifest.xml:28:18-86
+37        android:debuggable="true"
+38        android:extractNativeLibs="true"
+39        android:icon="@mipmap/ic_launcher"
+40        android:label="booking_sys" >
+41        <meta-data
+42            android:name="com.google.firebase.messaging.default_notification_channel_id"
+43            android:value="high_importance_channel" />
+44
+45        <activity
+46            android:name="com.example.booking_sys.MainActivity"
+47            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+48            android:exported="true"
+49            android:hardwareAccelerated="true"
+50            android:launchMode="singleTop"
+51            android:taskAffinity=""
+52            android:theme="@style/LaunchTheme"
+53            android:windowSoftInputMode="adjustResize" >
+54            <meta-data
+55                android:name="io.flutter.embedding.android.NormalTheme"
+56                android:resource="@style/NormalTheme" />
+57
+58            <intent-filter>
+59                <action android:name="android.intent.action.MAIN" />
+60
+61                <category android:name="android.intent.category.LAUNCHER" />
+62            </intent-filter>
+63        </activity>
+64
+65        <!-- Add notification receiver -->
+66        <receiver android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
+67
+68        <!-- Add boot receiver -->
+69        <receiver
+70            android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver"
+71            android:exported="false" >
+72            <intent-filter>
+73                <action android:name="android.intent.action.BOOT_COMPLETED" />
+74                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+75            </intent-filter>
+76        </receiver>
 77
-78        <activity
-78-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booking_sys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:8:9-11:74
-79            android:name="io.flutter.plugins.urllauncher.WebViewActivity"
-79-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booking_sys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:9:13-74
+78        <service
+79            android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingBackgroundService"
 80            android:exported="false"
-80-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booking_sys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:10:13-37
-81            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
-81-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booking_sys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:11:13-71
-82
-83        <uses-library
-83-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8859fd2468ade3ef2655d1f63d6737f2\transformed\jetified-window-1.2.0\AndroidManifest.xml:23:9-25:40
-84            android:name="androidx.window.extensions"
-84-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8859fd2468ade3ef2655d1f63d6737f2\transformed\jetified-window-1.2.0\AndroidManifest.xml:24:13-54
-85            android:required="false" />
-85-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8859fd2468ade3ef2655d1f63d6737f2\transformed\jetified-window-1.2.0\AndroidManifest.xml:25:13-37
-86        <uses-library
-86-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8859fd2468ade3ef2655d1f63d6737f2\transformed\jetified-window-1.2.0\AndroidManifest.xml:26:9-28:40
-87            android:name="androidx.window.sidecar"
-87-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8859fd2468ade3ef2655d1f63d6737f2\transformed\jetified-window-1.2.0\AndroidManifest.xml:27:13-51
-88            android:required="false" />
-88-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8859fd2468ade3ef2655d1f63d6737f2\transformed\jetified-window-1.2.0\AndroidManifest.xml:28:13-37
-89
-90        <provider
-90-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\40a1bd5ff2ce65cd1fad055cc690d356\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:24:9-32:20
-91            android:name="androidx.startup.InitializationProvider"
-91-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\40a1bd5ff2ce65cd1fad055cc690d356\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:25:13-67
-92            android:authorities="com.example.booking_sys.androidx-startup"
-92-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\40a1bd5ff2ce65cd1fad055cc690d356\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:26:13-68
-93            android:exported="false" >
-93-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\40a1bd5ff2ce65cd1fad055cc690d356\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:27:13-37
-94            <meta-data
-94-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\40a1bd5ff2ce65cd1fad055cc690d356\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:29:13-31:52
-95                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
-95-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\40a1bd5ff2ce65cd1fad055cc690d356\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:30:17-78
-96                android:value="androidx.startup" />
-96-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\40a1bd5ff2ce65cd1fad055cc690d356\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:31:17-49
-97            <meta-data
-97-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
-98                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
-98-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
-99                android:value="androidx.startup" />
-99-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
-100        </provider>
-101
-102        <receiver
-102-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
-103            android:name="androidx.profileinstaller.ProfileInstallReceiver"
-103-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
-104            android:directBootAware="false"
-104-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
-105            android:enabled="true"
-105-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
-106            android:exported="true"
-106-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
-107            android:permission="android.permission.DUMP" >
-107-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
-108            <intent-filter>
-108-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
-109                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
-109-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
-109-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
-110            </intent-filter>
-111            <intent-filter>
-111-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
-112                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
-112-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
-112-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
-113            </intent-filter>
+81            android:permission="android.permission.BIND_JOB_SERVICE" />
+82        <service
+83            android:name="io.flutter.plugins.firebase.messaging.FlutterFirebaseMessagingService"
+84            android:exported="false" >
+85            <intent-filter>
+86                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+87            </intent-filter>
+88        </service>
+89        <service
+90            android:name="com.google.firebase.messaging.FirebaseMessagingService"
+91            android:exported="true" >
+92            <intent-filter>
+93                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+94            </intent-filter>
+95        </service>
+96
+97        <meta-data
+98            android:name="flutterEmbedding"
+99            android:value="2" />
+100
+101        <provider
+101-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:9:9-17:20
+102            android:name="io.flutter.plugins.imagepicker.ImagePickerFileProvider"
+102-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:10:13-82
+103            android:authorities="com.example.booking_sys.flutter.image_provider"
+103-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:11:13-74
+104            android:exported="false"
+104-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:12:13-37
+105            android:grantUriPermissions="true" >
+105-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:13:13-47
+106            <meta-data
+106-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:14:13-16:75
+107                android:name="android.support.FILE_PROVIDER_PATHS"
+107-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:15:17-67
+108                android:resource="@xml/flutter_image_picker_file_paths" />
+108-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:16:17-72
+109        </provider> <!-- Trigger Google Play services to install the backported photo picker module. -->
+110        <service
+110-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:19:9-31:19
+111            android:name="com.google.android.gms.metadata.ModuleDependencies"
+111-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:20:13-78
+112            android:enabled="false"
+112-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:21:13-36
+113            android:exported="false" >
+113-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:22:13-37
 114            <intent-filter>
-114-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
-115                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
-115-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
-115-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+114-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:24:13-26:29
+115                <action android:name="com.google.android.gms.metadata.MODULE_DEPENDENCIES" />
+115-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:25:17-94
+115-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:25:25-91
 116            </intent-filter>
-117            <intent-filter>
-117-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
-118                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
-118-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
-118-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\408a642162969e960684d9c16b2f116a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
-119            </intent-filter>
-120        </receiver>
-121    </application>
+117
+118            <meta-data
+118-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:28:13-30:36
+119                android:name="photopicker_activity:0:required"
+119-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:29:17-63
+120                android:value="" />
+120-->[:image_picker_android] C:\Users\hollowmcat15\Documents\booksys\build\image_picker_android\intermediates\merged_manifest\debug\AndroidManifest.xml:30:17-33
+121        </service>
 122
-123</manifest>
+123        <activity
+123-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booksys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:8:9-11:74
+124            android:name="io.flutter.plugins.urllauncher.WebViewActivity"
+124-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booksys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:9:13-74
+125            android:exported="false"
+125-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booksys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:10:13-37
+126            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" />
+126-->[:url_launcher_android] C:\Users\hollowmcat15\Documents\booksys\build\url_launcher_android\intermediates\merged_manifest\debug\AndroidManifest.xml:11:13-71
+127
+128        <uses-library
+128-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8b7c6d211140d08bab99021d62acaf57\transformed\jetified-window-1.2.0\AndroidManifest.xml:23:9-25:40
+129            android:name="androidx.window.extensions"
+129-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8b7c6d211140d08bab99021d62acaf57\transformed\jetified-window-1.2.0\AndroidManifest.xml:24:13-54
+130            android:required="false" />
+130-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8b7c6d211140d08bab99021d62acaf57\transformed\jetified-window-1.2.0\AndroidManifest.xml:25:13-37
+131        <uses-library
+131-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8b7c6d211140d08bab99021d62acaf57\transformed\jetified-window-1.2.0\AndroidManifest.xml:26:9-28:40
+132            android:name="androidx.window.sidecar"
+132-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8b7c6d211140d08bab99021d62acaf57\transformed\jetified-window-1.2.0\AndroidManifest.xml:27:13-51
+133            android:required="false" />
+133-->[androidx.window:window:1.2.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\8b7c6d211140d08bab99021d62acaf57\transformed\jetified-window-1.2.0\AndroidManifest.xml:28:13-37
+134
+135        <provider
+135-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\496b7496257452f4dfdc067d33e1b491\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:24:9-32:20
+136            android:name="androidx.startup.InitializationProvider"
+136-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\496b7496257452f4dfdc067d33e1b491\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:25:13-67
+137            android:authorities="com.example.booking_sys.androidx-startup"
+137-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\496b7496257452f4dfdc067d33e1b491\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:26:13-68
+138            android:exported="false" >
+138-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\496b7496257452f4dfdc067d33e1b491\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:27:13-37
+139            <meta-data
+139-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\496b7496257452f4dfdc067d33e1b491\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:29:13-31:52
+140                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+140-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\496b7496257452f4dfdc067d33e1b491\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:30:17-78
+141                android:value="androidx.startup" />
+141-->[androidx.lifecycle:lifecycle-process:2.7.0] C:\Users\hollowmcat15\.gradle\caches\transforms-3\496b7496257452f4dfdc067d33e1b491\transformed\jetified-lifecycle-process-2.7.0\AndroidManifest.xml:31:17-49
+142            <meta-data
+142-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:29:13-31:52
+143                android:name="androidx.profileinstaller.ProfileInstallerInitializer"
+143-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:30:17-85
+144                android:value="androidx.startup" />
+144-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:31:17-49
+145        </provider>
+146
+147        <receiver
+147-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:34:9-52:20
+148            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+148-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:35:13-76
+149            android:directBootAware="false"
+149-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:36:13-44
+150            android:enabled="true"
+150-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:37:13-35
+151            android:exported="true"
+151-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:38:13-36
+152            android:permission="android.permission.DUMP" >
+152-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:39:13-57
+153            <intent-filter>
+153-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:40:13-42:29
+154                <action android:name="androidx.profileinstaller.action.INSTALL_PROFILE" />
+154-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:17-91
+154-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:41:25-88
+155            </intent-filter>
+156            <intent-filter>
+156-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:43:13-45:29
+157                <action android:name="androidx.profileinstaller.action.SKIP_FILE" />
+157-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:17-85
+157-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:44:25-82
+158            </intent-filter>
+159            <intent-filter>
+159-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:46:13-48:29
+160                <action android:name="androidx.profileinstaller.action.SAVE_PROFILE" />
+160-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:17-88
+160-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:47:25-85
+161            </intent-filter>
+162            <intent-filter>
+162-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:49:13-51:29
+163                <action android:name="androidx.profileinstaller.action.BENCHMARK_OPERATION" />
+163-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:17-95
+163-->[androidx.profileinstaller:profileinstaller:1.3.1] C:\Users\hollowmcat15\.gradle\caches\transforms-3\3afb2b8b6fa8c9416ff0406f0948507a\transformed\jetified-profileinstaller-1.3.1\AndroidManifest.xml:50:25-92
+164            </intent-filter>
+165        </receiver>
+166    </application>
+167
+168</manifest>
