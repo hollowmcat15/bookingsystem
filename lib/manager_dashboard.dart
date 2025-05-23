@@ -10,7 +10,6 @@ import 'manage_feedback.dart';
 import 'manage_users.dart';
 import 'add_spa.dart';
 import 'manager_appointments.dart';
-import 'notifications_page.dart';
 
 class ManagerDashboard extends StatefulWidget {
   final Map<String, dynamic> managerData;
@@ -130,21 +129,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     }
   },
 ),
-            ListTile(
-              leading: Icon(Icons.notifications),
-              title: Text("Notifications"),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => NotificationsPage(
-                      userId: widget.managerData['manager_id'].toString(), // Convert to String
-                      role: 'manager',
-                    ),
-                  ),
-                );
-              },
-            ),
             ListTile(
               leading: Icon(Icons.account_circle),
               title: Text("Profile Settings"),

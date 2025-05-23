@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:fl_chart/fl_chart.dart'; // Add this package
 
 class ReceptionistReports extends StatefulWidget {
   final Map<String, dynamic> receptionistData;
@@ -15,82 +16,76 @@ class _ReceptionistReportsState extends State<ReceptionistReports> {
   final SupabaseClient supabase = Supabase.instance.client;
   bool _isLoading = true;
   DateTimeRange? _dateRange;
-  double _totalRevenue = 0;
-  int _totalAppointments = 0;
-  List<Map<String, dynamic>> _topServices = [];
+  List<Map<String, dynamic>> _appointmentStats = [];
+  List<Map<String, dynamic>> _serviceStats = [];
 
   @override
   void initState() {
     super.initState();
     _dateRange = DateTimeRange(
-      start: DateTime.now().subtract(const Duration(days: 7)),
+      start: DateTime.now().subtract(const Duration(days: 30)),
       end: DateTime.now(),
     );
-    _fetchReports();
+    _fetchAnalytics();
   }
 
-  Future<void> _fetchReports() async {
-    if (widget.receptionistData['spa_id'] == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No spa linked to this receptionist')),
-      );
-      return;
-    }
-
+  Future<void> _fetchAnalytics() async {
+    setState(() => _isLoading = true);
     try {
-      setState(() => _isLoading = true);
-
-      final int spaId = widget.receptionistData['spa_id'];
-      final String startDate = DateFormat('yyyy-MM-dd').format(_dateRange!.start);
-      final String endDate = DateFormat('yyyy-MM-dd').format(_dateRange!.end.add(const Duration(days: 1)));
-
-      final appointments = await supabase
+      final response = await supabase
           .from('appointment')
-          .select('*, service(service_name, service_price)')
-          .eq('spa_id', spaId)
-          .gte('booking_date', startDate)
-          .lt('booking_date', endDate)
-          .eq('status', 'Completed');
+          .select('''
+            booking_date,
+            status,
+            service:service_id (
+              service_name,
+              service_price
+            )
+          ''')
+          .eq('spa_id', widget.receptionistData['spa_id'])
+          .gte('booking_date', _dateRange!.start.toIso8601String())
+          .lte('booking_date', _dateRange!.end.toIso8601String());
 
-      double revenue = 0;
-      int totalAppointments = appointments.length;
-      Map<String, int> serviceCounts = {};
+      // Process data for graphs
+      Map<String, int> statusCounts = {
+        'Scheduled': 0,
+        'Completed': 0,
+        'Cancelled': 0,
+        'Rescheduled': 0,
+      };
+      
+      Map<String, int> serviceBookings = {};
 
-      for (var appointment in appointments) {
-        final service = appointment['service'];
-        if (service != null) {
-          revenue += double.tryParse(service['service_price'].toString()) ?? 0.0;
-          final serviceName = service['service_name'];
-          serviceCounts[serviceName] = (serviceCounts[serviceName] ?? 0) + 1;
-        }
+      for (var appointment in response) {
+        // Count by status
+        final status = appointment['status'] as String;
+        statusCounts[status] = (statusCounts[status] ?? 0) + 1;
+
+        // Count by service
+        final serviceName = appointment['service']['service_name'] as String;
+        serviceBookings[serviceName] = (serviceBookings[serviceName] ?? 0) + 1;
       }
 
-      final sortedServices = serviceCounts.entries
-          .map((entry) => {'service_name': entry.key, 'count': entry.value})
-          .toList()
-          ..sort((a, b) => ((b as Map<String, dynamic>)['count'] ?? 0).compareTo((a as Map<String, dynamic>)['count'] ?? 0));
+      setState(() {
+        _appointmentStats = statusCounts.entries
+            .map((e) => {'status': e.key, 'count': e.value})
+            .toList();
 
+        _serviceStats = serviceBookings.entries
+            .map((e) => {'service': e.key, 'count': e.value})
+            .toList()
+          ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
-      if (mounted) {
-        setState(() {
-          _totalRevenue = revenue;
-          _totalAppointments = totalAppointments;
-          _topServices = sortedServices;
-          _isLoading = false;
-        });
-      }
+        _isLoading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading reports: $e')),
-        );
-        setState(() => _isLoading = false);
-      }
+      print('Error fetching analytics: $e');
+      setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _pickDateRange() async {
-    final DateTimeRange? picked = await showDateRangePicker(
+  Future<void> _selectDateRange() async {
+    final picked = await showDateRangePicker(
       context: context,
       initialDateRange: _dateRange,
       firstDate: DateTime(2020),
@@ -100,8 +95,156 @@ class _ReceptionistReportsState extends State<ReceptionistReports> {
     if (picked != null && picked != _dateRange) {
       setState(() {
         _dateRange = picked;
+        _fetchAnalytics();
       });
-      _fetchReports();
+    }
+  }
+
+  Widget _buildDateRangeCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            spreadRadius: 2,
+            blurRadius: 5,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Date Range',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey[800]),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}',
+            style: TextStyle(fontSize: 16, color: Colors.blueGrey[600]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppointmentStatusPieChart() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            spreadRadius: 2,
+            blurRadius: 5,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Appointment Status',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey[800]),
+          ),
+          const SizedBox(height: 16),
+          _isLoading
+              ? Center(child: CircularProgressIndicator())
+              : SizedBox(
+                  height: 200,
+                  child: PieChart(
+                    PieChartData(
+                      sections: _appointmentStats
+                          .map((stat) => PieChartSectionData(
+                                value: stat['count'].toDouble(),
+                                title: '${stat['status']}',
+                                color: _getStatusColor(stat['status']),
+                                radius: 50,
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildServiceBarChart() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            spreadRadius: 2,
+            blurRadius: 5,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Service Bookings',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey[800]),
+          ),
+          const SizedBox(height: 16),
+          _isLoading
+              ? Center(child: CircularProgressIndicator())
+              : SizedBox(
+                  height: 200,
+                  child: BarChart(
+                    BarChartData(
+                      barGroups: _serviceStats
+                          .asMap()
+                          .entries
+                          .map((entry) {
+                            final i = entry.key;
+                            final stat = entry.value;
+                            return BarChartGroupData(
+                              x: i,
+                              barRods: [
+                                BarChartRodData(
+                                  toY: stat['count'].toDouble(),
+                                  color: Colors.blue,
+                                  width: 20,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ],
+                            );
+                          })
+                          .toList(),
+                    ),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Scheduled':
+        return Colors.orange;
+      case 'Completed':
+        return Colors.green;
+      case 'Cancelled':
+        return Colors.red;
+      case 'Rescheduled':
+        return Colors.blue;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -109,53 +252,26 @@ class _ReceptionistReportsState extends State<ReceptionistReports> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Receptionist Reports'),
+        title: const Text('Analytics'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: _selectDateRange,
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: ListView(
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Date Range Selector
-                  InkWell(
-                    onTap: _pickDateRange,
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.grey),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        "Date Range: ${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}",
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                    ),
-                  ),
+                  _buildDateRangeCard(),
                   const SizedBox(height: 20),
-                  // Stats
-                  Text(
-                    "Total Appointments: $_totalAppointments",
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    "Total Revenue: ₱${_totalRevenue.toStringAsFixed(2)}",
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 30),
-                  // Services
-                  const Text(
-                    "Most Frequently Availed Services",
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 10),
-                  if (_topServices.isEmpty)
-                    const Text("No services found for selected period."),
-                  ..._topServices.map((service) => ListTile(
-                        title: Text(service['service_name']),
-                        trailing: Text("${service['count']} bookings"),
-                      )),
+                  _buildAppointmentStatusPieChart(),
+                  const SizedBox(height: 20),
+                  _buildServiceBarChart(),
                 ],
               ),
             ),

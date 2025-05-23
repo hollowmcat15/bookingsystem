@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'manage_notifications.dart';
 import 'login.dart';
 import 'client_dashboard.dart';
 import 'signup.dart';
@@ -18,15 +17,9 @@ Future<void> main() async {
     ),
   );
   
-  // Enable realtime for notifications table
+  // Enable realtime for general subscriptions
   final client = Supabase.instance.client;
-  client.channel('public:notification').subscribe();
-
-  // Initialize notifications
-  await NotificationManager.initializeNotifications();
-
-  // Subscribe to notifications
-  NotificationManager.subscribeToNotifications();
+  client.channel('public').subscribe();
 
   runApp(MyApp());
 }

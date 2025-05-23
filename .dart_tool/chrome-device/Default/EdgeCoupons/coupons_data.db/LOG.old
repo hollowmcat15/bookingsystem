@@ -1,8 +1,18 @@
-2025/05/16-03:32:17.870 1cbc Reusing MANIFEST C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.3aed5f0c\flutter_tools_chrome_device.8f900c0c\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
-2025/05/16-03:32:17.872 1cbc Recovering log #14
-2025/05/16-03:32:17.872 1cbc Reusing old log C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.3aed5f0c\flutter_tools_chrome_device.8f900c0c\Default\EdgeCoupons/coupons_data.db/000014.log 
-2025/05/16-03:32:17.873 1cbc Delete type=0 #4
-2025/05/16-03:32:17.873 1cbc Delete type=0 #7
-2025/05/16-03:32:17.873 1cbc Delete type=0 #10
-2025/05/16-03:32:17.873 1cbc Delete type=0 #13
-2025/05/16-03:32:17.874 1cbc Delete type=2 #14
+2025/05/21-10:21:07.405 1574 Reusing MANIFEST C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.ae16aa2f\flutter_tools_chrome_device.57b4a21b\Default\EdgeCoupons/coupons_data.db/MANIFEST-000001
+2025/05/21-10:21:07.422 1574 Recovering log #24
+2025/05/21-10:21:07.423 1574 Reusing old log C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.ae16aa2f\flutter_tools_chrome_device.57b4a21b\Default\EdgeCoupons/coupons_data.db/000024.log 
+2025/05/21-10:21:07.424 1574 Delete type=0 #4
+2025/05/21-10:21:07.424 1574 Delete type=0 #7
+2025/05/21-10:21:07.425 1574 Delete type=2 #8
+2025/05/21-10:21:07.425 1574 Delete type=0 #10
+2025/05/21-10:21:07.425 1574 Delete type=2 #11
+2025/05/21-10:21:07.425 1574 Delete type=2 #13
+2025/05/21-10:21:07.425 1574 Delete type=0 #13
+2025/05/21-10:21:07.426 1574 Delete type=2 #14
+2025/05/21-10:21:07.426 1574 Delete type=0 #14
+2025/05/21-10:21:07.426 1574 Delete type=2 #15
+2025/05/21-10:21:07.426 1574 Delete type=0 #17
+2025/05/21-10:21:07.427 1574 Delete type=0 #21
+2025/05/21-10:21:07.510 4a90 Level-0 table #28: started
+2025/05/21-10:21:07.514 4a90 Level-0 table #28: 670964 bytes OK
+2025/05/21-10:21:07.516 4a90 Delete type=0 #24

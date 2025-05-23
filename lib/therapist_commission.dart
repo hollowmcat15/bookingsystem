@@ -17,7 +17,7 @@ class _TherapistCommissionState extends State<TherapistCommission> {
   List<Map<String, dynamic>> _commissionData = [];
   double _totalEarnings = 0.0;
   int _completedServices = 0;
-  double _commissionRate = 0.3;
+  double _commissionRate = 0.25; // Changed from 0.3 to 0.25
 
   DateTime _startDate = DateTime.now().subtract(Duration(days: 7));
   DateTime _endDate = DateTime.now();
@@ -203,7 +203,7 @@ class _TherapistCommissionState extends State<TherapistCommission> {
                     Expanded(flex: 7, child: Text(entry.key, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 13))),
                     Expanded(
                       flex: 3,
-                      child: Text('\$${entry.value.toStringAsFixed(2)}',
+                      child: Text('₱${entry.value.toStringAsFixed(2)}',
                         textAlign: TextAlign.right,
                         style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green[700]),
                       ),
@@ -315,7 +315,7 @@ class _TherapistCommissionState extends State<TherapistCommission> {
                   padding: const EdgeInsets.all(16),
                   child: Row(
                     children: [
-                      _buildStatCard('Earnings', '\$${_totalEarnings.toStringAsFixed(2)}', Colors.green),
+                      _buildStatCard('Earnings', '₱${_totalEarnings.toStringAsFixed(2)}', Colors.green),
                       SizedBox(width: 12),
                       _buildStatCard('Completed', '$_completedServices', Colors.blue),
                     ],

@@ -23,6 +23,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _addressController;
   late TextEditingController _birthdayController; // For therapist
   
+  // Additional controllers for email/password
+  late TextEditingController _currentPasswordController;
+  late TextEditingController _newPasswordController;
+  late TextEditingController _confirmPasswordController;
+  late TextEditingController _newEmailController;
+
+  bool _showCurrentPassword = false;
+  bool _showNewPassword = false;
+  bool _showConfirmPassword = false;
+  bool _isEmailChangeMode = false;
+  bool _isPasswordChangeMode = false;
   bool _isLoading = true;
   String? _error;
   Map<String, dynamic>? _userData;
@@ -54,6 +65,10 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _phoneController = TextEditingController();
     _addressController = TextEditingController();
     _birthdayController = TextEditingController();
+    _currentPasswordController = TextEditingController();
+    _newPasswordController = TextEditingController();
+    _confirmPasswordController = TextEditingController();
+    _newEmailController = TextEditingController();
     
     _setupBasedOnRole();
     
@@ -138,6 +153,10 @@ void _setupBasedOnRole() {
     _phoneController.dispose();
     _addressController.dispose();
     _birthdayController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    _newEmailController.dispose();
     super.dispose();
   }
 
@@ -316,6 +335,98 @@ void _setupBasedOnRole() {
     }
   }
 
+  Future<void> _updateEmail() async {
+    if (!_formKey.currentState!.validate() || _tableName == null) return;
+
+    try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
+      final currentUserEmail = supabase.auth.currentUser!.email!;
+      final newEmail = _newEmailController.text.trim();
+      final currentPassword = _currentPasswordController.text;
+
+      // First verify password
+      final AuthResponse verifyResponse = await supabase.auth.signInWithPassword(
+        email: currentUserEmail,
+        password: currentPassword,
+      );
+
+      if (verifyResponse.user == null) {
+        throw AuthException('Invalid credentials');
+      }
+
+      // Use RPC to update auth email
+      await supabase.rpc('change_user_email', params: {
+        'old_email': currentUserEmail,
+        'new_email': newEmail,
+      });
+
+      // Update the database table
+      await supabase.from(_tableName!).update({
+        'email': newEmail,
+      }).eq('email', currentUserEmail);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Email updated successfully. Please sign in with your new email.')),
+        );
+        // Sign out and redirect to login
+        await supabase.auth.signOut();
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _updatePassword() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_newPasswordController.text != _confirmPasswordController.text) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("New passwords do not match!")),
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await supabase.auth.updateUser(
+        UserAttributes(password: _newPasswordController.text),
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Password updated successfully!")),
+        );
+        setState(() {
+          _isPasswordChangeMode = false;
+          _currentPasswordController.clear();
+          _newPasswordController.clear();
+          _confirmPasswordController.clear();
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
   Future<void> _pickDate() async {
     final DateTime? picked = await showDatePicker(
       context: context,
@@ -329,6 +440,16 @@ void _setupBasedOnRole() {
         _selectedBirthday = picked;
         _birthdayController.text = DateFormat('yyyy-MM-dd').format(picked);
       });
+    }
+  }
+
+  /// Get color based on therapist status
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Active': return Colors.green;
+      case 'Busy': return Colors.orange;
+      case 'Inactive': return Colors.red;
+      default: return Colors.grey;
     }
   }
 
@@ -367,150 +488,310 @@ void _setupBasedOnRole() {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        // Profile section header
                         Text(
                           'Edit Your Profile',
                           style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                         ),
                         SizedBox(height: 20),
-                        TextFormField(
-                          controller: _firstNameController,
-                          decoration: InputDecoration(
-                            labelText: 'First Name',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.person),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your first name';
-                            }
-                            return null;
-                          },
+
+                        // Toggle buttons for different sections
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            ElevatedButton(
+                              onPressed: () => setState(() {
+                                _isEmailChangeMode = false;
+                                _isPasswordChangeMode = false;
+                              }),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: (!_isEmailChangeMode && !_isPasswordChangeMode) 
+                                  ? Theme.of(context).primaryColor 
+                                  : Colors.grey,
+                              ),
+                              child: Text('Profile Info'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => setState(() {
+                                _isEmailChangeMode = true;
+                                _isPasswordChangeMode = false;
+                              }),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isEmailChangeMode 
+                                  ? Theme.of(context).primaryColor 
+                                  : Colors.grey,
+                              ),
+                              child: Text('Change Email'),
+                            ),
+                            ElevatedButton(
+                              onPressed: () => setState(() {
+                                _isEmailChangeMode = false;
+                                _isPasswordChangeMode = true;
+                              }),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: _isPasswordChangeMode 
+                                  ? Theme.of(context).primaryColor 
+                                  : Colors.grey,
+                              ),
+                              child: Text('Change Password'),
+                            ),
+                          ],
                         ),
-                        SizedBox(height: 16),
-                        TextFormField(
-                          controller: _lastNameController,
-                          decoration: InputDecoration(
-                            labelText: 'Last Name',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.person),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your last name';
-                            }
-                            return null;
-                          },
-                        ),
-                        SizedBox(height: 16),
-                        TextFormField(
-                          controller: _phoneController,
-                          decoration: InputDecoration(
-                            labelText: 'Phone Number',
-                            border: OutlineInputBorder(),
-                            prefixIcon: Icon(Icons.phone),
-                          ),
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your phone number';
-                            }
-                            return null;
-                          },
-                        ),
-                        if (_hasAddressField) ...[
-                          SizedBox(height: 16),
+                        SizedBox(height: 20),
+
+                        // Show different forms based on mode
+                        if (!_isEmailChangeMode && !_isPasswordChangeMode) ...[
+                          // Original profile edit form fields
                           TextFormField(
-                            controller: _addressController,
+                            controller: _firstNameController,
                             decoration: InputDecoration(
-                              labelText: 'Address',
+                              labelText: 'First Name',
                               border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.home),
+                              prefixIcon: Icon(Icons.person),
                             ),
                             validator: (value) {
                               if (value == null || value.isEmpty) {
-                                return 'Please enter your address';
+                                return 'Please enter your first name';
                               }
                               return null;
                             },
                           ),
-                        ],
-                        if (_hasBirthdayField) ...[
                           SizedBox(height: 16),
-                          GestureDetector(
-                            onTap: _pickDate,
-                            child: AbsorbPointer(
-                              child: TextFormField(
-                                controller: _birthdayController,
-                                decoration: InputDecoration(
-                                  labelText: 'Birthday',
-                                  hintText: 'YYYY-MM-DD',
-                                  border: OutlineInputBorder(),
-                                  prefixIcon: Icon(Icons.cake),
-                                  suffixIcon: Icon(Icons.calendar_today),
+                          TextFormField(
+                            controller: _lastNameController,
+                            decoration: InputDecoration(
+                              labelText: 'Last Name',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.person),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your last name';
+                              }
+                              return null;
+                            },
+                          ),
+                          SizedBox(height: 16),
+                          TextFormField(
+                            controller: _phoneController,
+                            decoration: InputDecoration(
+                              labelText: 'Phone Number',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.phone),
+                            ),
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter your phone number';
+                              }
+                              return null;
+                            },
+                          ),
+                          if (_hasAddressField) ...[
+                            SizedBox(height: 16),
+                            TextFormField(
+                              controller: _addressController,
+                              decoration: InputDecoration(
+                                labelText: 'Address',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.home),
+                              ),
+                              validator: (value) {
+                                if (value == null || value.isEmpty) {
+                                  return 'Please enter your address';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                          if (_hasBirthdayField) ...[
+                            SizedBox(height: 16),
+                            GestureDetector(
+                              onTap: _pickDate,
+                              child: AbsorbPointer(
+                                child: TextFormField(
+                                  controller: _birthdayController,
+                                  decoration: InputDecoration(
+                                    labelText: 'Birthday',
+                                    hintText: 'YYYY-MM-DD',
+                                    border: OutlineInputBorder(),
+                                    prefixIcon: Icon(Icons.cake),
+                                    suffixIcon: Icon(Icons.calendar_today),
+                                  ),
                                 ),
                               ),
                             ),
+                          ],
+                          if (_hasStatusField && _currentStatus != null) ...[
+                            SizedBox(height: 16),
+                            DropdownButtonFormField<String>(
+                              value: _currentStatus,
+                              decoration: InputDecoration(
+                                labelText: 'Status',
+                                border: OutlineInputBorder(),
+                                prefixIcon: Icon(Icons.circle, color: _getStatusColor(_currentStatus!)),
+                              ),
+                              items: _statusOptions.map((String status) {
+                                return DropdownMenuItem<String>(
+                                  value: status,
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: _getStatusColor(status),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(status),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (String? newValue) {
+                                if (newValue != null) {
+                                  setState(() {
+                                    _currentStatus = newValue;
+                                  });
+                                }
+                              },
+                            ),
+                          ],
+                          SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: _updateProfile,
+                              child: Text('Save Changes', style: TextStyle(fontSize: 16)),
+                            ),
                           ),
                         ],
-                        if (_hasStatusField && _currentStatus != null) ...[
-                          SizedBox(height: 16),
-                          DropdownButtonFormField<String>(
-                            value: _currentStatus,
+
+                        if (_isEmailChangeMode) ...[
+                          TextFormField(
+                            controller: _newEmailController,
                             decoration: InputDecoration(
-                              labelText: 'Status',
+                              labelText: 'New Email',
                               border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.circle, color: _getStatusColor(_currentStatus!)),
+                              prefixIcon: Icon(Icons.email),
                             ),
-                            items: _statusOptions.map((String status) {
-                              return DropdownMenuItem<String>(
-                                value: status,
-                                child: Row(
-                                  children: [
-                                    Container(
-                                      width: 12,
-                                      height: 12,
-                                      decoration: BoxDecoration(
-                                        color: _getStatusColor(status),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    SizedBox(width: 8),
-                                    Text(status),
-                                  ],
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (String? newValue) {
-                              if (newValue != null) {
-                                setState(() {
-                                  _currentStatus = newValue;
-                                });
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Please enter new email';
                               }
+                              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                                return 'Please enter a valid email';
+                              }
+                              return null;
                             },
                           ),
-                        ],
-                        SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 50,
-                          child: ElevatedButton(
-                            onPressed: _updateProfile,
-                            child: Text('Save Changes', style: TextStyle(fontSize: 16)),
+                          SizedBox(height: 16),
+                          TextFormField(
+                            controller: _currentPasswordController,
+                            decoration: InputDecoration(
+                              labelText: 'Current Password',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.lock),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
+                                ),
+                                onPressed: () => setState(() {
+                                  _showCurrentPassword = !_showCurrentPassword;
+                                }),
+                              ),
+                            ),
+                            obscureText: !_showCurrentPassword,
+                            validator: (value) => value!.isEmpty ? 'Please enter current password' : null,
                           ),
-                        ),
+                          SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: _updateEmail,
+                              child: Text('Update Email', style: TextStyle(fontSize: 16)),
+                            ),
+                          ),
+                        ],
+
+                        if (_isPasswordChangeMode) ...[
+                          TextFormField(
+                            controller: _currentPasswordController,
+                            decoration: InputDecoration(
+                              labelText: 'Current Password',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.lock),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
+                                ),
+                                onPressed: () => setState(() {
+                                  _showCurrentPassword = !_showCurrentPassword;
+                                }),
+                              ),
+                            ),
+                            obscureText: !_showCurrentPassword,
+                            validator: (value) => value!.isEmpty ? 'Please enter current password' : null,
+                          ),
+                          SizedBox(height: 16),
+                          TextFormField(
+                            controller: _newPasswordController,
+                            decoration: InputDecoration(
+                              labelText: 'New Password',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showNewPassword ? Icons.visibility : Icons.visibility_off,
+                                ),
+                                onPressed: () => setState(() {
+                                  _showNewPassword = !_showNewPassword;
+                                }),
+                              ),
+                            ),
+                            obscureText: !_showNewPassword,
+                            validator: (value) => value!.length < 6 
+                              ? 'Password must be at least 6 characters' 
+                              : null,
+                          ),
+                          SizedBox(height: 16),
+                          TextFormField(
+                            controller: _confirmPasswordController,
+                            decoration: InputDecoration(
+                              labelText: 'Confirm New Password',
+                              border: OutlineInputBorder(),
+                              prefixIcon: Icon(Icons.lock_outline),
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _showConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                                ),
+                                onPressed: () => setState(() {
+                                  _showConfirmPassword = !_showConfirmPassword;
+                                }),
+                              ),
+                            ),
+                            obscureText: !_showConfirmPassword,
+                            validator: (value) => value != _newPasswordController.text 
+                              ? 'Passwords do not match' 
+                              : null,
+                          ),
+                          SizedBox(height: 24),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: _updatePassword,
+                              child: Text('Update Password', style: TextStyle(fontSize: 16)),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
                 ),
     );
-  }
-  
-  /// Get color based on therapist status
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Active': return Colors.green;
-      case 'Busy': return Colors.orange;
-      case 'Inactive': return Colors.red;
-      default: return Colors.grey;
-    }
   }
 }

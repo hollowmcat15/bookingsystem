@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import 'manage_notifications.dart';  // Add this import
 
 class ManageFeedback extends StatefulWidget {
   final int spaId;
@@ -20,18 +19,11 @@ class _ManageFeedbackState extends State<ManageFeedback> {
   bool _isLoading = true;
   String? _error;
   List<Map<String, dynamic>> _feedbackList = [];
-  final TextEditingController _replyController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _fetchFeedback();
-  }
-
-  @override
-  void dispose() {
-    _replyController.dispose();
-    super.dispose();
   }
 
   Future<void> _fetchFeedback() async {
@@ -67,123 +59,6 @@ class _ManageFeedbackState extends State<ManageFeedback> {
         _isLoading = false;
       });
     }
-  }
-
-  Future<void> _submitReply(int feedbackId) async {
-    if (_replyController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reply cannot be empty')),
-      );
-      return;
-    }
-
-    try {
-      setState(() {
-        _isLoading = true;
-      });
-
-      // Get the manager's ID from the authenticated user
-      final User? user = supabase.auth.currentUser;
-      if (user == null) {
-        throw Exception('User not authenticated');
-      }
-
-      // Get manager ID from the managers table
-      final managerData = await supabase
-          .from('manager')
-          .select('manager_id')
-          .eq('auth_id', user.id)
-          .single();
-
-      // Update feedback with response
-      await supabase
-          .from('feedback')
-          .update({
-            'response_text': _replyController.text,
-            'manager_id': managerData['manager_id'],
-            // 'updated_at': DateTime.now().toIso8601String(),
-          })
-          .eq('feedback_id', feedbackId);
-
-      // After successful reply, notify the manager
-      final feedbackData = await supabase
-          .from('feedback')
-          .select('*, client(*), spa(*)')
-          .eq('feedback_id', feedbackId)
-          .single();
-
-      // After successful reply, notify the client about the response
-      if (feedbackData != null) {
-        await NotificationManager.createFeedbackNotification(
-          managerId: managerData['manager_id'].toString(),
-          clientName: '${feedbackData['client']['first_name']} ${feedbackData['client']['last_name']}',
-        );
-      }
-
-      // Clear the text field and refresh the feedback list
-      _replyController.clear();
-      _fetchFeedback();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Reply submitted successfully')),
-      );
-    } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _error = 'Failed to submit reply: ${e.toString()}';
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to submit reply: ${e.toString()}')),
-      );
-    }
-  }
-
-  void _showReplyDialog(BuildContext context, Map<String, dynamic> feedback) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text('Reply to Feedback'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Original Feedback:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              Text(feedback['feedback_text'] ?? ''),
-              SizedBox(height: 16),
-              TextField(
-                controller: _replyController,
-                decoration: InputDecoration(
-                  hintText: 'Type your reply here...',
-                  border: OutlineInputBorder(),
-                ),
-                minLines: 3,
-                maxLines: 5,
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                _replyController.clear();
-                Navigator.of(context).pop();
-              },
-              child: Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                _submitReply(feedback['feedback_id']);
-              },
-              child: Text('Submit Reply'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   Widget _buildFeedbackCard(Map<String, dynamic> feedback) {
@@ -283,24 +158,12 @@ class _ManageFeedbackState extends State<ManageFeedback> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Your Reply:',
+                      'Manager Response:',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     SizedBox(height: 4),
                     Text(feedback['response_text']),
                   ],
-                ),
-              )
-            else
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  icon: Icon(Icons.reply),
-                  label: Text('Reply'),
-                  onPressed: () {
-                    _replyController.text = feedback['response_text'] ?? '';
-                    _showReplyDialog(context, feedback);
-                  },
                 ),
               ),
           ],

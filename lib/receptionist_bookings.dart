@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'book_appointment.dart'; // Import BookAppointment class
-import 'manage_notifications.dart';  // Add this import
 
 // --- Models (Keep as they are) ---
 class AppointmentModel {
@@ -842,85 +841,6 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
   }
   // --- END NEW FUNCTION ---
 
-  // Add this helper method
-  Future<void> _scheduleNotifications(Map<String, dynamic> appointment) async {
-    final appointmentDateTime = _getBookingDateTime(appointment);
-    if (appointmentDateTime == null) return;
-
-    // Schedule notification for client
-    if (appointment['client'] != null && appointment['client']['client_id'] != null) {
-      await NotificationManager.scheduleAppointmentNotification(
-        appointmentDateTime: appointmentDateTime,
-        clientName: '${appointment['client']['first_name']} ${appointment['client']['last_name']}',
-        therapistName: appointment['therapist'] != null ? 
-          '${appointment['therapist']['first_name']} ${appointment['therapist']['last_name']}' : 'Unassigned',
-        userId: appointment['client']['client_id'].toString(),
-        userRole: 'client',
-        appointmentId: appointment['book_id'],
-      );
-    }
-
-    // Schedule notification for therapist
-    if (appointment['therapist'] != null && appointment['therapist']['therapist_id'] != null) {
-      await NotificationManager.scheduleAppointmentNotification(
-        appointmentDateTime: appointmentDateTime,
-        clientName: '${appointment['client']['first_name']} ${appointment['client']['last_name']}',
-        therapistName: '${appointment['therapist']['first_name']} ${appointment['therapist']['last_name']}',
-        userId: appointment['therapist']['therapist_id'].toString(),
-        userRole: 'therapist',
-        appointmentId: appointment['book_id'],
-      );
-    }
-
-    // Schedule notification for receptionist
-    if (appointment['receptionist_id'] != null) {
-      await NotificationManager.scheduleAppointmentNotification(
-        appointmentDateTime: appointmentDateTime,
-        clientName: '${appointment['client']['first_name']} ${appointment['client']['last_name']}',
-        therapistName: '',
-        userId: appointment['receptionist_id'].toString(),
-        userRole: 'receptionist',
-        appointmentId: appointment['book_id'],
-      );
-    }
-  }
-
-  // Add this helper method
-  DateTime? _getBookingDateTime(Map<String, dynamic> appointment) {
-    if (appointment['booking_date'] == null || appointment['booking_start_time'] == null) {
-      return null;
-    }
-    
-    final bookingDate = DateTime.parse(appointment['booking_date']);
-    final startTime = appointment['booking_start_time'].toString();
-    final timeParts = startTime.split(':');
-    
-    if (timeParts.length >= 2) {
-      final hour = int.parse(timeParts[0]);
-      final minute = int.parse(timeParts[1]);
-      return DateTime(bookingDate.year, bookingDate.month, bookingDate.day, hour, minute);
-    }
-    return null;
-  }
-
-  // Modify the existing method to include notification scheduling
-  Future<void> _updateAppointment(int bookingId, DateTime newDateTime) async {
-    try {
-      // ...existing update code...
-
-      // After successful update, schedule notifications
-      final updatedAppointment = await _supabase
-          .from('appointment')
-          .select('*, client(*), therapist(*)')
-          .eq('book_id', bookingId)
-          .single();
-
-      await _scheduleNotifications(updatedAppointment);
-    } catch (e) {
-      // ...existing error handling...
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1535,74 +1455,8 @@ class _RescheduleAppointmentPageState extends State<RescheduleAppointmentPage> {
             'therapist_id': _selectedTherapist!.therapistId,
             'status': 'Rescheduled',
             'updated_at': DateTime.now().toIso8601String(),
-            // Optionally update receptionist_id if needed
-            // 'receptionist_id': widget.receptionistId, // You'd need to pass receptionistId here
           })
           .eq('book_id', widget.appointment.bookId);
-
-      // After successful update, schedule notifications
-      final updatedAppointment = await _supabase
-          .from('appointment')
-          .select('''
-            *, 
-            client:client_id(*),
-            therapist:therapist_id(*),
-            spa:spa_id(*)
-          ''')
-          .eq('book_id', widget.appointment.bookId)
-          .single();
-
-      if (updatedAppointment != null) {
-        // Get the appointment date/time
-        final bookingDate = DateTime.parse(updatedAppointment['booking_date']);
-        final startTime = updatedAppointment['booking_start_time'].toString();
-        final timeParts = startTime.split(':');
-        if (timeParts.length >= 2) {
-          final appointmentDateTime = DateTime(
-            bookingDate.year,
-            bookingDate.month,
-            bookingDate.day,
-            int.parse(timeParts[0]),
-            int.parse(timeParts[1]),
-          );
-
-          // Schedule notifications for all parties
-          await NotificationManager.scheduleAppointmentNotification(
-            appointmentDateTime: appointmentDateTime,
-            clientName: '${updatedAppointment['client']['first_name']} ${updatedAppointment['client']['last_name']}',
-            therapistName: updatedAppointment['therapist'] != null ? 
-              '${updatedAppointment['therapist']['first_name']} ${updatedAppointment['therapist']['last_name']}' : 'Unassigned',
-            userId: updatedAppointment['client_id'].toString(),
-            userRole: 'client',
-            appointmentId: widget.appointment.bookId,
-          );
-
-          // For therapist if assigned
-          if (updatedAppointment['therapist_id'] != null) {
-            await NotificationManager.scheduleAppointmentNotification(
-              appointmentDateTime: appointmentDateTime,
-              clientName: '${updatedAppointment['client']['first_name']} ${updatedAppointment['client']['last_name']}',
-              therapistName: '${updatedAppointment['therapist']['first_name']} ${updatedAppointment['therapist']['last_name']}',
-              userId: updatedAppointment['therapist_id'].toString(),
-              userRole: 'therapist',
-              appointmentId: widget.appointment.bookId,
-            );
-          }
-
-          // For receptionist
-          if (updatedAppointment['receptionist_id'] != null) {
-            await NotificationManager.scheduleAppointmentNotification(
-              appointmentDateTime: appointmentDateTime,
-              clientName: '${updatedAppointment['client']['first_name']} ${updatedAppointment['client']['last_name']}',
-              therapistName: updatedAppointment['therapist'] != null ?
-                '${updatedAppointment['therapist']['first_name']} ${updatedAppointment['therapist']['last_name']}' : 'Unassigned',
-              userId: updatedAppointment['receptionist_id'].toString(),
-              userRole: 'receptionist',
-              appointmentId: widget.appointment.bookId,
-            );
-          }
-        }
-      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1611,7 +1465,7 @@ class _RescheduleAppointmentPageState extends State<RescheduleAppointmentPage> {
             backgroundColor: Colors.green,
           ),
         );
-        Navigator.of(context).pop(true); // Return success
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       print('[RescheduleAppointment] Error rescheduling appointment: $e');

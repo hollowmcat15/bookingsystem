@@ -4,7 +4,8 @@ import 'spa_details.dart';
 import 'manage_bookings.dart';
 import 'profile_page.dart';
 import 'login.dart';
-import 'notifications_page.dart';
+import 'package:flutter/services.dart';
+import 'dart:math' as math;
 
 class ClientDashboard extends StatefulWidget {
   @override
@@ -15,22 +16,66 @@ class _ClientDashboardState extends State<ClientDashboard> {
   final SupabaseClient supabase = Supabase.instance.client;
   List<Map<String, dynamic>> _spas = [];
 
+  // Add new state variables for filtering
+  String _searchQuery = '';
+  RangeValues _priceRange = RangeValues(0, 10000);  // Adjust max as needed
+  double _minRating = 0;
+  Set<String> _selectedServiceTypes = {};
+  TimeOfDay? _preferredTime;
+  bool _showFilterPanel = false;
+  List<String> _serviceTypes = [];
+  double _maxPrice = 10000;
+
   @override
   void initState() {
     super.initState();
     _fetchSpas();
+    _fetchServiceTypes();
   }
 
-  /// ✅ Fetch available spas
+  /// Fetch unique service types
+  Future<void> _fetchServiceTypes() async {
+    try {
+      final response = await supabase
+          .from('service')
+          .select('service_name')
+          .order('service_name');
+      
+      if (mounted) {
+        setState(() {
+          _serviceTypes = List<String>.from(
+            response.map((s) => s['service_name'] as String).toSet()
+          );
+        });
+      }
+    } catch (e) {
+      print('Error fetching service types: $e');
+    }
+  }
+
+  /// Enhanced spa fetching with ratings and services
   Future<void> _fetchSpas() async {
     try {
       final response = await supabase
           .from('spa')
-          .select('spa_id, spa_name, spa_address, image_url');
+          .select('''
+            *,
+            services:service(*),
+            feedback:feedback(rating)
+          ''')
+          .order('spa_name');
 
       if (mounted) {
         setState(() {
           _spas = List<Map<String, dynamic>>.from(response);
+          // Calculate max price for range slider
+          _maxPrice = _spas.fold(0.0, (max, spa) {
+            final services = List<Map<String, dynamic>>.from(spa['services'] ?? []);
+            final spaMaxPrice = services.fold(0.0, (p, service) => 
+              math.max(p, (service['service_price'] ?? 0).toDouble()));
+            return math.max(max, spaMaxPrice);
+          });
+          _priceRange = RangeValues(0, _maxPrice);
         });
       }
     } catch (e) {
@@ -68,8 +113,100 @@ Future<void> _logout() async {
   }
 }
 
+  /// Filter spas based on criteria
+  List<Map<String, dynamic>> _getFilteredSpas() {
+    return _spas.where((spa) {
+      // Search filter
+      final matchesSearch = _searchQuery.isEmpty ||
+          spa['spa_name'].toString().toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          spa['spa_address'].toString().toLowerCase().contains(_searchQuery.toLowerCase());
+
+      // Price range filter
+      final services = List<Map<String, dynamic>>.from(spa['services'] ?? []);
+      final hasServiceInPriceRange = services.any((service) {
+        final price = (service['service_price'] ?? 0).toDouble();
+        return price >= _priceRange.start && price <= _priceRange.end;
+      });
+
+      // Rating filter - Fix type error by explicitly handling int values
+      final ratings = List<Map<String, dynamic>>.from(spa['feedback'] ?? []);
+      final averageRating = ratings.isEmpty ? 0.0 :
+          ratings.fold<int>(0, (sum, item) => sum + (item['rating'] as int)) / ratings.length;
+      final meetsRatingCriteria = averageRating >= _minRating;
+
+      // Service type filter
+      final hasSelectedServices = _selectedServiceTypes.isEmpty ||
+          services.any((service) => _selectedServiceTypes.contains(service['service_name']));
+
+      return matchesSearch && 
+             hasServiceInPriceRange && 
+             meetsRatingCriteria && 
+             hasSelectedServices;
+    }).toList();
+  }
+
+  /// Build filter panel
+  Widget _buildFilterPanel() {
+    return AnimatedContainer(
+      duration: Duration(milliseconds: 300),
+      height: _showFilterPanel ? null : 0,
+      child: Card(
+        child: Padding(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Price Range'),
+              RangeSlider(
+                values: _priceRange,
+                min: 0,
+                max: _maxPrice,
+                divisions: 20,
+                labels: RangeLabels(
+                  '₱${_priceRange.start.toStringAsFixed(0)}',
+                  '₱${_priceRange.end.toStringAsFixed(0)}'
+                ),
+                onChanged: (values) => setState(() => _priceRange = values),
+              ),
+              
+              Text('Minimum Rating'),
+              Slider(
+                value: _minRating,
+                min: 0,
+                max: 5,
+                divisions: 5,
+                label: '${_minRating.toStringAsFixed(1)} ★',
+                onChanged: (value) => setState(() => _minRating = value),
+              ),
+              
+              Text('Service Types'),
+              Wrap(
+                spacing: 8,
+                children: _serviceTypes.map((type) => FilterChip(
+                  label: Text(type),
+                  selected: _selectedServiceTypes.contains(type),
+                  onSelected: (selected) {
+                    setState(() {
+                      if (selected) {
+                        _selectedServiceTypes.add(type);
+                      } else {
+                        _selectedServiceTypes.remove(type);
+                      }
+                    });
+                  },
+                )).toList(),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final filteredSpas = _getFilteredSpas();
+    
     return Scaffold(
       drawer: Drawer(
         child: ListView(
@@ -132,29 +269,6 @@ Future<void> _logout() async {
   },
 ),
             ListTile(
-              leading: const Icon(Icons.notifications),
-              title: const Text('Notifications'),
-              onTap: () async {
-                // Get the current user's UUID directly from Supabase auth
-                final user = supabase.auth.currentUser;
-                if (user?.id != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => NotificationsPage(
-                        userId: user!.id, // Use the UUID from auth
-                        role: 'client',
-                      ),
-                    ),
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Please log in again')),
-                  );
-                }
-              },
-            ),
-            ListTile(
               leading: Icon(Icons.exit_to_app),
               title: Text("Logout"),
               onTap: _logout,
@@ -176,25 +290,54 @@ Future<void> _logout() async {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              "Available Spas",
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            // Search bar
+            TextField(
+              decoration: InputDecoration(
+                hintText: 'Search spas...',
+                prefixIcon: Icon(Icons.search),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              onChanged: (value) => setState(() => _searchQuery = value),
             ),
-            SizedBox(height: 10),
-            _spas.isEmpty
-                ? Expanded(
-                    child: Center(
-                      child: Text(
-                        "No spas available",
-                        style: TextStyle(fontSize: 18, color: Colors.grey),
-                      ),
-                    ),
-                  )
-                : Expanded(
-                    child: ListView.builder(
-                      itemCount: _spas.length,
+            
+            // Filter toggle
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  "Available Spas",
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+                ),
+                TextButton.icon(
+                  icon: Icon(_showFilterPanel ? Icons.expand_less : Icons.expand_more),
+                  label: Text("Filters"),
+                  onPressed: () => setState(() => _showFilterPanel = !_showFilterPanel),
+                ),
+              ],
+            ),
+            
+            // Filter panel
+            _buildFilterPanel(),
+            
+            // Results count
+            Padding(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                '${filteredSpas.length} results found',
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            
+            // Spa list
+            Expanded(
+              child: filteredSpas.isEmpty
+                  ? Center(child: Text("No spas match your criteria"))
+                  : ListView.builder(
+                      itemCount: filteredSpas.length,
                       itemBuilder: (context, index) {
-                        final spa = _spas[index];
+                        final spa = filteredSpas[index];
                         return Card(
                           margin: EdgeInsets.symmetric(vertical: 8),
                           elevation: 4,
@@ -243,7 +386,7 @@ Future<void> _logout() async {
                         );
                       },
                     ),
-                  ),
+            ),
           ],
         ),
       ),

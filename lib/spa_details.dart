@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'book_appointment.dart';
-import 'manage_notifications.dart';
 
 class SpaDetails extends StatefulWidget {
   final int spaId;
@@ -22,6 +21,7 @@ class _SpaDetailsState extends State<SpaDetails> {
   int? _userReviewId;
   bool _isLoading = true;
   int? _currentClientId;
+  Map<int, bool> _bookmarkedServices = {};  // Track bookmarked status for each service
 
   @override
   void initState() {
@@ -40,6 +40,7 @@ class _SpaDetailsState extends State<SpaDetails> {
         _fetchSpaDetails(),
         _fetchServices(),
         _fetchReviews(),
+        _fetchBookmarks(),  // Add this
       ]);
     } catch (e) {
       _showErrorSnackBar('Failed to load spa details: ${e.toString()}');
@@ -142,9 +143,33 @@ Future<void> _fetchReviews() async {
   }
 }
 
+  /// Fetch bookmarks
+  Future<void> _fetchBookmarks() async {
+    final clientId = _currentClientId;
+    if (clientId == null) return;
+
+    try {
+      final response = await _supabase
+          .from('bookmark')
+          .select('service_id')
+          .eq('client_id', clientId.toString()); // Convert to string for comparison
+
+      if (mounted) {
+        setState(() {
+          _bookmarkedServices = Map.fromEntries(
+            response.map<MapEntry<int, bool>>((bookmark) => 
+              MapEntry(bookmark['service_id'], true)
+            ),
+          );
+        });
+      }
+    } catch (e) {
+      print('Error fetching bookmarks: $e');
+    }
+  }
+
   /// Submit a review
   Future<void> _submitReview(int rating, String feedbackTitle, String feedbackText, int serviceId) async {
-    // Store _currentClientId in a local variable to enable type promotion
     final clientId = _currentClientId;
     if (clientId == null) {
       _showErrorSnackBar("You must be logged in to leave a review.");
@@ -162,14 +187,14 @@ Future<void> _fetchReviews() async {
       final clientData = await _supabase
           .from('client')
           .select('first_name, last_name')
-          .eq('client_id', clientId)  // Use local variable
+          .eq('client_id', clientId)
           .single();
       
       final clientName = "${clientData['first_name']} ${clientData['last_name']}";
 
       // Submit the feedback
       await _supabase.from('feedback').insert({
-        'client_id': clientId,  // Use local variable
+        'client_id': clientId,
         'spa_id': widget.spaId,
         'service_id': serviceId,
         'feedback_title': feedbackTitle,
@@ -178,13 +203,6 @@ Future<void> _fetchReviews() async {
         'created_at': DateTime.now().toIso8601String(),
       });
 
-      // Send notification to manager
-      await NotificationManager.createFeedbackNotification(
-        managerId: spaData['manager_id']?.toString() ?? '',  // Add null safety
-        clientName: clientName,
-        feedbackSummary: feedbackText,
-      );
-
       await _fetchReviews();
       _showSuccessSnackBar("Review submitted successfully!");
     } on PostgrestException catch (error) {
@@ -192,23 +210,48 @@ Future<void> _fetchReviews() async {
     }
   }
 
-  /// Delete a review with confirmation
-  Future<void> _deleteReview(int reviewId) async {
-    try {
-      final confirmDelete = await _showDeleteConfirmation();
-      if (!confirmDelete) return;
+  /// Toggle bookmark status
+  Future<void> _toggleBookmark(int serviceId) async {
+    final clientId = _currentClientId;
+    if (clientId == null) {
+      _showLoginPrompt();
+      return;
+    }
 
-      await _supabase.from('feedback').delete().eq('feedback_id', reviewId);
-      
-      setState(() {
-        _userHasReview = false;
-        _userReviewId = null;
-      });
-      
-      await _fetchReviews();
-      _showSuccessSnackBar("Review deleted successfully!");
-    } on PostgrestException catch (error) {
-      _showErrorSnackBar('Failed to delete review: ${error.message}');
+    try {
+      final isCurrentlyBookmarked = _bookmarkedServices[serviceId] ?? false;
+
+      if (isCurrentlyBookmarked) {
+        // Remove bookmark
+        await _supabase
+            .from('bookmark')
+            .delete()
+            .eq('client_id', clientId.toString()) // Convert to string
+            .eq('service_id', serviceId);
+      } else {
+        // Add bookmark
+        await _supabase.from('bookmark').insert({
+          'client_id': clientId.toString(), // Convert to string
+          'service_id': serviceId,
+        });
+      }
+
+      if (mounted) {
+        setState(() {
+          _bookmarkedServices[serviceId] = !isCurrentlyBookmarked;
+        });
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(isCurrentlyBookmarked 
+            ? 'Service removed from bookmarks' 
+            : 'Service added to bookmarks'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      _showErrorSnackBar('Error updating bookmark: ${e.toString()}');
     }
   }
 
@@ -219,126 +262,156 @@ Future<void> _fetchReviews() async {
     return double.parse((total / _reviews.length).toStringAsFixed(1));
   }
 
-  /// Show delete confirmation dialog
-  Future<bool> _showDeleteConfirmation() async {
-    return await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text("Confirm Delete"),
-            content: Text("Are you sure you want to delete your review?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: Text("Cancel"),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: Text("Delete"),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-  }
-
   /// Show review submission dialog
   void _showReviewDialog() {
-  int selectedRating = 5;
-  int? selectedServiceId;
-  TextEditingController titleController = TextEditingController();
-  TextEditingController reviewController = TextEditingController();
+    // Prevent multiple reviews
+    if (_userHasReview) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('You have already submitted a review'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
 
-  showDialog(
-    context: context,
-    builder: (context) {
-      return StatefulBuilder(
-        builder: (context, setState) {
-          return AlertDialog(
-            title: Text("Leave a Review"),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Service selection dropdown
-                  DropdownButtonFormField<int>(
-                    decoration: InputDecoration(labelText: "Select a Service"),
-                    value: selectedServiceId,
-                    hint: Text("Select a service to review"),
-                    items: _services.map((service) {
-                      return DropdownMenuItem<int>(
-                        value: service['service_id'],
-                        child: Text(service['service_name']),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        selectedServiceId = value;
-                      });
-                    },
-                    validator: (value) =>
-                        value == null ? "Please select a service" : null,
-                  ),
-                  SizedBox(height: 10),
-                  TextField(
-                    controller: titleController,
-                    decoration: InputDecoration(labelText: "Review Title"),
-                  ),
-                  TextField(
-                    controller: reviewController,
-                    decoration: InputDecoration(labelText: "Write your review..."),
-                    maxLines: 3,
-                  ),
-                  SizedBox(height: 10),
-                  Text("Select Rating:"),
-                  DropdownButton<int>(
-                    value: selectedRating,
-                    items: [1, 2, 3, 4, 5].map((int value) {
-                      return DropdownMenuItem<int>(
-                        value: value,
-                        child: Text("$value ★"),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      if (value != null) {
+    int selectedRating = 5;
+    int? selectedServiceId;
+    TextEditingController titleController = TextEditingController();
+    TextEditingController reviewController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text("Leave a Review"),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Service selection dropdown
+                    DropdownButtonFormField<int>(
+                      decoration: InputDecoration(labelText: "Select a Service"),
+                      value: selectedServiceId,
+                      hint: Text("Select a service to review"),
+                      items: _services.map((service) {
+                        return DropdownMenuItem<int>(
+                          value: service['service_id'],
+                          child: Text(service['service_name']),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
                         setState(() {
-                          selectedRating = value;
+                          selectedServiceId = value;
                         });
-                      }
-                    },
-                  ),
-                ],
+                      },
+                    ),
+                    SizedBox(height: 16),
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(labelText: "Review Title"),
+                    ),
+                    TextField(
+                      controller: reviewController,
+                      decoration: InputDecoration(labelText: "Write your review..."),
+                      maxLines: 3,
+                    ),
+                    SizedBox(height: 24),
+                    Text(
+                      "Rate your experience:",
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                    ),
+                    SizedBox(height: 8),
+                    // Google Play Store style rating
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        return GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              selectedRating = index + 1;
+                            });
+                          },
+                          child: Container(
+                            padding: EdgeInsets.symmetric(horizontal: 4),
+                            child: Icon(
+                              index < selectedRating 
+                                ? Icons.star_rate_rounded 
+                                : Icons.star_border_rounded,
+                              size: 40,
+                              color: index < selectedRating 
+                                ? Colors.amber
+                                : Colors.grey[400],
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                    Text(
+                      _getRatingDescription(selectedRating),
+                      style: TextStyle(
+                        color: Colors.grey[600],
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text("Cancel"),
-              ),
-              ElevatedButton(
-                onPressed: () {
-                  if (titleController.text.isNotEmpty && 
-                      reviewController.text.isNotEmpty && 
-                      selectedServiceId != null) {
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text("Cancel"),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    if (titleController.text.isEmpty || 
+                        reviewController.text.isEmpty || 
+                        selectedServiceId == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text("Please fill in all fields"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                      return;
+                    }
                     _submitReview(
-                      selectedRating, 
-                      titleController.text, 
+                      selectedRating,
+                      titleController.text,
                       reviewController.text,
-                      selectedServiceId!
+                      selectedServiceId!,
                     );
                     Navigator.pop(context);
-                  } else {
-                    _showErrorSnackBar("Please fill in all fields and select a service");
-                  }
-                },
-                child: Text("Submit"),
-              ),
-            ],
-          );
-        },
-      );
-    },
-  );
-}
+                  },
+                  child: Text("Submit"),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  String _getRatingDescription(int rating) {
+    switch (rating) {
+      case 1:
+        return "Poor";
+      case 2:
+        return "Fair";
+      case 3:
+        return "Good";
+      case 4:
+        return "Very Good";
+      case 5:
+        return "Excellent";
+      default:
+        return "";
+    }
+  }
 
   /// Show error snackbar
   void _showErrorSnackBar(String message) {
@@ -377,6 +450,46 @@ Future<void> _fetchReviews() async {
     );
   }
 
+  // Update the services section in the build method
+  Widget _buildServicesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Services",
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        _services.isEmpty
+            ? Text("No services available")
+            : Column(
+                children: _services.map((service) {
+                  final isBookmarked = _bookmarkedServices[service['service_id']] ?? false;
+                  return ListTile(
+                    title: Text(service['service_name']),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          '₱${service['service_price']}',
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            isBookmarked ? Icons.bookmark : Icons.bookmark_border,
+                            color: isBookmarked ? Colors.blue : null,
+                          ),
+                          onPressed: () => _toggleBookmark(service['service_id']),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
+      ],
+    );
+  }
+
+  // Update the build method to use the new services section
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -472,23 +585,7 @@ Future<void> _fetchReviews() async {
                             SizedBox(height: 16),
 
                             // Services Section
-                            Text(
-                              "Services",
-                              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            _services.isEmpty
-                                ? Text("No services available")
-                                : Column(
-                                    children: _services.map((service) {
-                                      return ListTile(
-                                        title: Text(service['service_name']),
-                                        trailing: Text(
-                                          '₱${service['service_price']}',
-                                          style: TextStyle(fontWeight: FontWeight.bold),
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
+                            _buildServicesSection(), // Replace the old services section
                             SizedBox(height: 16),
 
                             // Ratings & Reviews Section
@@ -517,7 +614,7 @@ Future<void> _fetchReviews() async {
                                 : Column(
                                     children: _reviews.map((review) {
                                       bool isUserReview = _currentClientId != null && 
-                                                          review['client_id'] == _currentClientId;
+                                                      review['client_id'].toString() == _currentClientId.toString();
                                       return Card(
                                         margin: EdgeInsets.symmetric(vertical: 8),
                                         elevation: 3,
@@ -575,19 +672,6 @@ Future<void> _fetchReviews() async {
                                               ],
                                             ],
                                           ),
-                                          trailing: isUserReview
-                                              ? PopupMenuButton<String>(
-                                                  onSelected: (value) {
-                                                    if (value == "delete") _deleteReview(review['feedback_id']);
-                                                  },
-                                                  itemBuilder: (context) => [
-                                                    PopupMenuItem<String>(
-                                                      value: "delete",
-                                                      child: Text("Delete"),
-                                                    ),
-                                                  ],
-                                                )
-                                              : null,
                                         ),
                                       );
                                     }).toList(),

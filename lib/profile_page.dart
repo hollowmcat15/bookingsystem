@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'change_password.dart';
-import 'change_email.dart';
-import 'edit_profile.dart'; // Separate screen for editing profile
+import 'edit_profile.dart';
 
 class ProfilePage extends StatefulWidget {
   final String userRole;
@@ -246,7 +244,7 @@ Future<void> _fetchUserData() async {
           : ListView(
               padding: const EdgeInsets.all(16.0),
               children: [
-                // Display user info at the top
+                // Display user info card
                 Card(
                   elevation: 4,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
@@ -361,44 +359,20 @@ Future<void> _fetchUserData() async {
                   ),
                 ),
                 SizedBox(height: 24),
-                _buildSectionTitle("User Profile Settings"),
-                _buildOptionTile(
-                    context,
-                    icon: Icons.person,
-                    title: "Edit Profile",
-                    subtitle: "Update your personal information",
-                    onTap: () => Navigator.push(
-                      context, 
-                      MaterialPageRoute(builder: (context) => EditProfilePage(userRole: widget.userRole))
-                    ).then((result) {
-                      // Refresh data when returning from edit profile
-                      if (result == true) {
-                        _fetchUserData().then((_) {
-                          // Return updated data to previous screen
-                          if (Navigator.canPop(context)) {
-                            Navigator.pop(context, userData);
-                          }
-                        });
-                      }
-                    }),
-                  ),
-                SizedBox(height: 16),
-                _buildSectionTitle("Email Settings"),
+                _buildSectionTitle("Profile Settings"),
                 _buildOptionTile(
                   context,
-                  icon: Icons.email,
-                  title: "Change Email",
-                  subtitle: "Update your email address",
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ChangeEmailPage())),
-                ),
-                SizedBox(height: 16),
-                _buildSectionTitle("Password Settings"),
-                _buildOptionTile(
-                  context,
-                  icon: Icons.lock,
-                  title: "Change Password",
-                  subtitle: "Update your password",
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ChangePasswordPage())),
+                  icon: Icons.person,
+                  title: "Edit Profile",
+                  subtitle: "Update your profile information, email, and password",
+                  onTap: () => Navigator.push(
+                    context, 
+                    MaterialPageRoute(builder: (context) => EditProfilePage(userRole: widget.userRole))
+                  ).then((result) {
+                    if (result == true) {
+                      _fetchUserData();
+                    }
+                  }),
                 ),
               ],
             ),

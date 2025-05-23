@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
-import 'therapist_commission.dart'; // Ensure this path is correct
-import 'therapist_reports.dart';   // Ensure this path is correct
-import 'login.dart'; // Import for logout functionality
-import 'edit_profile.dart'; // Add this import if it's not already there
+import 'therapist_commission.dart';
+import 'login.dart';
+import 'edit_profile.dart';
 import 'profile_page.dart';
-import 'notifications_page.dart';
-import 'manage_notifications.dart'; // Add this import
 
 class TherapistDashboard extends StatefulWidget {
   final Map<String, dynamic> therapistData;
@@ -107,25 +104,6 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
         _pastAppointments.sort((a, b) => _getStatusPriority(a['status']) - _getStatusPriority(b['status']));
         
         _isLoading = false;
-
-        // Schedule notifications for upcoming appointments
-        for (var appointment in _upcomingAppointments) {
-          final clientData = appointment['client'] as Map<String, dynamic>;
-          final clientName = '${clientData['first_name']} ${clientData['last_name']}'.trim();
-          final appointmentDate = DateTime.parse(appointment['booking_date']);
-          final startTime = appointment['booking_start_time'];
-          final dateTime = DateTime.parse('${appointment['booking_date']} $startTime');
-
-          // Schedule notification for therapist
-          NotificationManager.scheduleAppointmentNotification(
-            appointmentDateTime: dateTime,
-            clientName: clientName,
-            therapistName: '${widget.therapistData['first_name']} ${widget.therapistData['last_name']}',
-            userId: widget.therapistData['therapist_id'].toString(),
-            userRole: 'therapist',
-            appointmentId: appointment['book_id'],
-          );
-        }
       });
     }
   } catch (e) {
@@ -177,10 +155,6 @@ int _getStatusPriority(String? status) {
   void _navigateToCommissions() {
     Navigator.push(context, MaterialPageRoute(builder: (context) => TherapistCommission(therapistData: widget.therapistData)));
   }
-
-  void _navigateToReports() {
-  Navigator.push(context, MaterialPageRoute(builder: (context) => TherapistReportsPage()));
-}
 
   Future<void> _logout() async {
     await supabase.auth.signOut();
@@ -280,27 +254,6 @@ int _getStatusPriority(String? status) {
               onTap: () {
                 Navigator.pop(context);
                 _navigateToCommissions();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.assessment),
-              title: Text("View Reports"),
-              onTap: () {
-                Navigator.pop(context);
-                _navigateToReports();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications),
-              title: const Text('Notifications'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => NotificationsPage(
-                    userId: widget.therapistData['therapist_id'].toString(), // Convert to String
-                    role: 'therapist',
-                  )),
-                );
               },
             ),
             ListTile(
@@ -535,33 +488,32 @@ int _getStatusPriority(String? status) {
   }
 
   Future<void> _updateStatus(String newStatus) async {
-  try {
-    final int therapistId = widget.therapistData['therapist_id'];
-    // Remove the updated_at field from the update operation
-    await supabase.from('therapist').update({'status': newStatus}).eq('therapist_id', therapistId);
-    if (mounted) {
-      setState(() { 
-        _currentStatus = newStatus; 
-        widget.therapistData['status'] = newStatus; 
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Status updated to $newStatus'), 
-          backgroundColor: Colors.green, 
-          duration: Duration(seconds: 2)
-        )
-      );
-    }
-  } catch (e) {
-    print("Error updating status: $e");
-    if (mounted) { 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error updating status: ${e.toString()}'), 
-          backgroundColor: Colors.red
-        )
-      ); 
+    try {
+      final int therapistId = widget.therapistData['therapist_id'];
+      await supabase.from('therapist').update({'status': newStatus}).eq('therapist_id', therapistId);
+      if (mounted) {
+        setState(() { 
+          _currentStatus = newStatus; 
+          widget.therapistData['status'] = newStatus; 
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Status updated to $newStatus'), 
+            backgroundColor: Colors.green, 
+            duration: Duration(seconds: 2)
+          )
+        );
+      }
+    } catch (e) {
+      print("Error updating status: $e");
+      if (mounted) { 
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error updating status: ${e.toString()}'), 
+            backgroundColor: Colors.red
+          )
+        ); 
+      }
     }
   }
-}
 }

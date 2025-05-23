@@ -36,6 +36,10 @@ class _AddSpaState extends State<AddSpa> {
   final ImagePicker _picker = ImagePicker();
   String? _uploadedImageUrl;
 
+  // Add these time controllers
+  TimeOfDay _openingTime = TimeOfDay(hour: 9, minute: 0);  // default 9:00 AM
+  TimeOfDay _closingTime = TimeOfDay(hour: 21, minute: 0);  // default 9:00 PM
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -138,22 +142,42 @@ class _AddSpaState extends State<AddSpa> {
       // Insert new spa into database with the manager ID
       await supabase.from('spa').insert({
         'spa_id': newSpaId,
-        'manager_id': widget.managerId, // Set the manager_id as foreign key
+        'manager_id': widget.managerId,
         'spa_name': _nameController.text,
         'spa_address': _addressController.text,
         'postal_code': _postalCodeController.text,
         'spa_phonenumber': _phoneController.text,
         'description': _descriptionController.text,
+        'opening_time': '${_openingTime.hour.toString().padLeft(2, '0')}:${_openingTime.minute.toString().padLeft(2, '0')}',
+        'closing_time': '${_closingTime.hour.toString().padLeft(2, '0')}:${_closingTime.minute.toString().padLeft(2, '0')}',
         'image_url': _uploadedImageUrl,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       });
-      
-      // No need to update manager table separately
-      // The relationship is established through manager_id in the spa table
+
+      // Add default services
+      final List<Map<String, dynamic>> defaultServices = [
+        {'name': 'Foot massage', 'price': 650.00},
+        {'name': 'Thai body massage', 'price': 650.00},
+        {'name': 'Hot stone massage', 'price': 850.00},
+        {'name': 'Coconut oil massage', 'price': 800.00},
+        {'name': 'Dry massage', 'price': 800.00},
+        {'name': 'Aroma oil massage', 'price': 800.00},
+      ];
+
+      for (var service in defaultServices) {
+        await supabase.from('service').insert({
+          'spa_id': newSpaId,
+          'service_name': service['name'],
+          'service_price': service['price'],
+          'created_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+          'is_archived': false,
+        });
+      }
       
       if (mounted) {
-        Navigator.pop(context); // Return to dashboard
+        Navigator.pop(context);
       }
     } catch (e) {
       setState(() {
@@ -162,6 +186,23 @@ class _AddSpaState extends State<AddSpa> {
     } finally {
       setState(() {
         _isLoading = false;
+      });
+    }
+  }
+
+  // Add this helper method
+  Future<void> _selectTime(BuildContext context, bool isOpeningTime) async {
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: isOpeningTime ? _openingTime : _closingTime,
+    );
+    if (picked != null) {
+      setState(() {
+        if (isOpeningTime) {
+          _openingTime = picked;
+        } else {
+          _closingTime = picked;
+        }
       });
     }
   }
@@ -290,6 +331,29 @@ class _AddSpaState extends State<AddSpa> {
                   }
                   return null;
                 },
+              ),
+              SizedBox(height: 16),
+              
+              // Add these time picker fields before the description field
+              Row(
+                children: [
+                  Expanded(
+                    child: ListTile(
+                      title: Text('Opening Time'),
+                      subtitle: Text('${_openingTime.format(context)}'),
+                      onTap: () => _selectTime(context, true),
+                      trailing: Icon(Icons.access_time),
+                    ),
+                  ),
+                  Expanded(
+                    child: ListTile(
+                      title: Text('Closing Time'),
+                      subtitle: Text('${_closingTime.format(context)}'),
+                      onTap: () => _selectTime(context, false),
+                      trailing: Icon(Icons.access_time),
+                    ),
+                  ),
+                ],
               ),
               SizedBox(height: 24),
               

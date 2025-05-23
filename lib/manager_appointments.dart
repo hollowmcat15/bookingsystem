@@ -567,7 +567,11 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
   @override
   Widget build(BuildContext context) {
     final client = widget.appointment['client'] ?? {};
-    
+    final servicePrice = widget.services.firstWhere(
+      (service) => service['service_id'] == widget.appointment['service_id'],
+      orElse: () => {'service_price': 0},
+    )['service_price'];
+
     return AlertDialog(
       title: const Text('Appointment Details'),
       content: SingleChildScrollView(
@@ -612,7 +616,7 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
                 ...widget.services.map((service) {
                   return DropdownMenuItem<int?>(
                     value: service['service_id'],
-                    child: Text('${service['service_name']} - \$${service['service_price']}'),
+                    child: Text('${service['service_name']} - ₱${service['service_price']}'),
                   );
                 }).toList(),
               ],
@@ -749,6 +753,11 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Service Fee: ₱${servicePrice.toStringAsFixed(2)}',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ],
         ),

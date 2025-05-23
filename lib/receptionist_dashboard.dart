@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'receptionist_bookings.dart'; // Import the receptionist_bookings.dart file
+import 'receptionist_bookings.dart';
 import 'login.dart';
 import 'profile_page.dart';
-import 'receptionist_commission.dart';
 import 'receptionist_reports.dart';
-import 'notifications_page.dart';
 
 class ReceptionistDashboard extends StatefulWidget {
   final Map<String, dynamic> receptionistData;
@@ -75,8 +73,7 @@ class _ReceptionistDashboardState extends State<ReceptionistDashboard> {
         )
       )
     ).then((_) {
-      // Refresh data when returning from bookings page
-      setState(() {}); // Trigger a rebuild to refresh the appointments list
+      setState(() {}); 
     });
   }
 
@@ -127,15 +124,12 @@ class _ReceptionistDashboardState extends State<ReceptionistDashboard> {
                   MaterialPageRoute(
                     builder: (context) => ProfilePage(userRole: 'receptionist')
                   )
-                ).then((_) {
-                  // Refresh receptionist data when returning from profile page if needed
-                  _fetchSpaDetails();
-                });
+                ).then((_) => _fetchSpaDetails());
               },
             ),
             ListTile(
-              leading: Icon(Icons.assessment),
-              title: Text("View Reports"),
+              leading: Icon(Icons.bar_chart),
+              title: Text("Generate Graphs"),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -143,35 +137,6 @@ class _ReceptionistDashboardState extends State<ReceptionistDashboard> {
                   MaterialPageRoute(
                     builder: (context) => ReceptionistReports(receptionistData: widget.receptionistData)
                   )
-                );
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.attach_money),
-              title: Text("View Commissions"),
-              onTap: () {
-                Navigator.pop(context);
-                  Navigator.push(
-  context,
-  MaterialPageRoute(
-    builder: (context) => ReceptionistCommissionsPage(
-      receptionistId: widget.receptionistData['receptionist_id'],
-    ),
-  ),
-);
-
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.notifications),
-              title: const Text('Notifications'),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => NotificationsPage(
-                    userId: widget.receptionistData['receptionist_id'].toString(), // Convert to String
-                    role: 'receptionist',
-                  )),
                 );
               },
             ),

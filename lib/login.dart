@@ -4,7 +4,9 @@ import 'signup.dart';
 import 'client_dashboard.dart';
 import 'manager_dashboard.dart';
 import 'therapist_dashboard.dart';
-import 'receptionist_dashboard.dart';  // Import the new receptionist dashboard
+import 'receptionist_dashboard.dart';
+import 'admin_dashboard.dart';  // Add this import
+import 'change_password.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -53,97 +55,128 @@ class _LoginPageState extends State<LoginPage> {
       );
 
       final Session? session = response.session;
-      if (session != null) {
-        final String userId = session.user.id;
-
-        // Check if user is a Manager
-        final List<Map<String, dynamic>> managerCheck = await supabase
-            .from('manager')
-            .select()
-            .eq('auth_id', userId);
-
-        if (managerCheck.isNotEmpty) {
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ManagerDashboard(managerData: managerCheck.first),
-              ),
-            );
-          }
-          return;
-        }
-
-        // Check if user is a Therapist
-        final List<Map<String, dynamic>> therapistCheck = await supabase
-            .from('therapist')
-            .select()
-            .eq('auth_id', userId);
-
-        if (therapistCheck.isNotEmpty) {
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TherapistDashboard(therapistData: therapistCheck.first),
-              ),
-            );
-          }
-          return;
-        }
-
-        // Check if user is a Receptionist
-        final List<Map<String, dynamic>> receptionistCheck = await supabase
-            .from('receptionist')
-            .select()
-            .eq('auth_id', userId);
-
-        if (receptionistCheck.isNotEmpty) {
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(
-                builder: (context) => ReceptionistDashboard(receptionistData: receptionistCheck.first),
-              ),
-            );
-          }
-          return;
-        }
-
-        // Check if user is a Client
-        final String? userEmail = session?.user.email;
-
-        if (userEmail != null) {  // Ensure userEmail is not null
-          final List<Map<String, dynamic>> clientCheck = await supabase
-              .from('client')
-              .select()
-              .eq('email', userEmail);  // This prevents the nullable error
-
-          if (clientCheck.isNotEmpty) {
-            if (mounted) {
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ClientDashboard(),
-                ),
-              );
-            }
-            return;
-          }
-        }
-
-        // No valid role found
-        await supabase.auth.signOut();
-        if (mounted) {
-          setState(() {
-            _errorMessage = "Access denied: No valid role assigned.";
-          });
-        }
+      if (session == null) {
+        throw 'Authentication failed';
       }
+
+      final String userId = session.user.id;
+      final String? userEmail = session.user.email;
+
+      // Check roles in order of privilege: Admin > Staff > Client
+      try {
+        // 1. Check Admin
+        final adminData = await supabase
+            .from('admin')
+            .select()
+            .eq('auth_id', userId)
+            .single();
+            
+        if (adminData != null) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AdminDashboard(adminData: adminData),
+              ),
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        // Not an admin, continue checking other roles
+      }
+
+      try {
+        // 2. Check Staff (Manager, Therapist, Receptionist)
+        final staffData = await supabase
+            .from('staff')
+            .select('''
+              *,
+              spa (
+                spa_id,
+                spa_name,
+                spa_address,
+                postal_code,
+                spa_phonenumber,
+                opening_time,
+                closing_time
+              )
+            ''')
+            .eq('auth_id', userId)
+            .single();
+
+        if (staffData != null) {
+          if (mounted) {
+            switch (staffData['role']) {
+              case 'Manager':
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ManagerDashboard(managerData: staffData),
+                  ),
+                );
+                break;
+              case 'Therapist':
+                if (staffData['status'] == 'Inactive') {
+                  throw 'Your account is currently inactive. Please contact your manager.';
+                }
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => TherapistDashboard(therapistData: staffData),
+                  ),
+                );
+                break;
+              case 'Receptionist':
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ReceptionistDashboard(receptionistData: staffData),
+                  ),
+                );
+                break;
+            }
+          }
+          return;
+        }
+      } catch (e) {
+        // Not a staff member, continue checking client
+      }
+
+      try {
+        // 3. Check Client
+        if (userEmail == null) throw 'Invalid email';
+        
+        final clientData = await supabase
+            .from('client')
+            .select()
+            .eq('email', userEmail)
+            .single();
+
+        if (clientData != null) {
+          if (mounted) {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ClientDashboard(), // Remove clientData parameter
+              ),
+            );
+          }
+          return;
+        }
+      } catch (e) {
+        // Not a client
+      }
+
+      // No valid role found
+      await supabase.auth.signOut();
+      throw 'Access denied: No valid role assigned';
+
     } catch (e) {
       if (mounted) {
         setState(() {
-          _errorMessage = "Login failed: ${e.toString()}";
+          _errorMessage = e.toString();
+          _isLoading = false;
         });
       }
     } finally {
@@ -222,6 +255,22 @@ class _LoginPageState extends State<LoginPage> {
                   Navigator.push(context, MaterialPageRoute(builder: (context) => SignUpPage()));
                 },
                 child: Text("Don't have an account? Sign up", style: TextStyle(fontSize: 16)),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChangePasswordPage(
+                        isForgotPassword: true,
+                      ),
+                    ),
+                  );
+                },
+                child: Text(
+                  "Forgot password? Click here",
+                  style: TextStyle(fontSize: 16, color: Colors.blue),
+                ),
               ),
             ],
           ),

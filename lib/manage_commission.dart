@@ -643,13 +643,13 @@ class _ManageCommissionState extends State<ManageCommission> with SingleTickerPr
                       ),
                     ],
                   ),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildTherapistsTab() {

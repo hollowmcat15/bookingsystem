@@ -361,132 +361,65 @@ class _ManageBookingsState extends State<ManageBookings> {
 
   /// Filter and sort appointments based on filter selection
   List<Map<String, dynamic>> _getFilteredBookings() {
-    // First, filter based on past/upcoming
     List<Map<String, dynamic>> filtered = [];
+    final now = DateTime.now();
     
-    if (selectedFilter == 'Past') {
-      // Get past appointments
-      filtered = bookings.where((booking) {
-        final bookingDateTime = _getBookingDateTime(booking);
-        return bookingDateTime != null && bookingDateTime.isBefore(DateTime.now());
-      }).toList();
-      
-      // Sort past appointments by status: Completed first, then Cancelled
-      filtered.sort((a, b) {
-        // First, sort by status priority
-        final statusA = a['status'] ?? '';
-        final statusB = b['status'] ?? '';
+    switch (selectedFilter) {
+      case 'Past':
+        filtered = bookings.where((booking) {
+          final bookingDateTime = _getBookingDateTime(booking);
+          final status = booking['status'];
+          return bookingDateTime != null && 
+                 bookingDateTime.isBefore(now) &&
+                 status != 'Cancelled' &&  // Exclude cancelled
+                 status != 'Scheduled' &&  // Exclude upcoming
+                 status != 'Rescheduled';  // Exclude rescheduled
+        }).toList();
+        break;
         
-        // Define status priority for Past: Completed (1), Cancelled (2), Others (3)
-        int getPriorityPast(String status) {
-          if (status == 'Completed') return 1;
-          if (status == 'Cancelled') return 2;
-          return 3;
-        }
+      case 'Upcoming':
+        filtered = bookings.where((booking) {
+          final bookingDateTime = _getBookingDateTime(booking);
+          final status = booking['status'];
+          return bookingDateTime != null &&
+                 (bookingDateTime.isAfter(now) ||
+                  _isSameDay(bookingDateTime, now)) &&
+                 (status == 'Scheduled' || status == 'Rescheduled');
+        }).toList();
+        break;
         
-        final priorityA = getPriorityPast(statusA);
-        final priorityB = getPriorityPast(statusB);
+      case 'Cancelled':
+        filtered = bookings.where((booking) =>
+          booking['status'] == 'Cancelled'
+        ).toList();
+        break;
         
-        if (priorityA != priorityB) {
-          return priorityA.compareTo(priorityB);
-        }
-        
-        // If same status, sort by date (most recent first)
-        final dateTimeA = _getBookingDateTime(a);
-        final dateTimeB = _getBookingDateTime(b);
-        
-        if (dateTimeA == null) return 1;
-        if (dateTimeB == null) return -1;
-        
-        // Sort in descending order for past bookings (most recent first)
-        return dateTimeB.compareTo(dateTimeA);
-      });
-      
-    } else if (selectedFilter == 'Upcoming') {
-      // Get upcoming appointments, only include Scheduled and Rescheduled
-      filtered = bookings.where((booking) {
-        final bookingDateTime = _getBookingDateTime(booking);
-        final status = booking['status'] ?? '';
-        
-        // Only include appointments in the future AND with status "Scheduled" or "Rescheduled"
-        return bookingDateTime != null && 
-               bookingDateTime.isAfter(DateTime.now().subtract(const Duration(days: 1))) &&
-               (status == 'Scheduled' || status == 'Rescheduled');
-      }).toList();
-      
-      // Sort upcoming appointments: Scheduled first, then Rescheduled, then by date
-      filtered.sort((a, b) {
-        // First, sort by status priority
-        final statusA = a['status'] ?? '';
-        final statusB = b['status'] ?? '';
-        
-        // Define status priority: Scheduled (1), Rescheduled (2)
-        int getPriorityUpcoming(String status) {
-          if (status == 'Scheduled') return 1;
-          if (status == 'Rescheduled') return 2;
-          return 3;
-        }
-        
-        final priorityA = getPriorityUpcoming(statusA);
-        final priorityB = getPriorityUpcoming(statusB);
-        
-        if (priorityA != priorityB) {
-          return priorityA.compareTo(priorityB);
-        }
-        
-        // If same status, sort by date (soonest first)
-        final dateTimeA = _getBookingDateTime(a);
-        final dateTimeB = _getBookingDateTime(b);
-        
-        if (dateTimeA == null) return 1;
-        if (dateTimeB == null) return -1;
-        
-        return dateTimeA.compareTo(dateTimeB);
-      });
-      
-    } else {
-      // All bookings - sort by status priority then date
-      filtered = bookings;
-      
-      filtered.sort((a, b) {
-        // Define status priority: Scheduled (1), Rescheduled (2), Completed (3), Cancelled (4)
-        int getPriority(String status) {
-          if (status == 'Scheduled') return 1;
-          if (status == 'Rescheduled') return 2;
-          if (status == 'Completed') return 3;
-          if (status == 'Cancelled') return 4;
-          return 5;
-        }
-        
-        final statusA = a['status'] ?? '';
-        final statusB = b['status'] ?? '';
-        
-        final priorityA = getPriority(statusA);
-        final priorityB = getPriority(statusB);
-        
-        if (priorityA != priorityB) {
-          return priorityA.compareTo(priorityB);
-        }
-        
-        // If same status, sort by date
-        final dateTimeA = _getBookingDateTime(a);
-        final dateTimeB = _getBookingDateTime(b);
-        
-        if (dateTimeA == null) return 1;
-        if (dateTimeB == null) return -1;
-        
-        // For past appointments (completed/cancelled), sort in descending order
-        if (priorityA >= 3) {
-          return dateTimeB.compareTo(dateTimeA); // Most recent first
-        } else {
-          return dateTimeA.compareTo(dateTimeB); // Soonest first
-        }
-      });
+      default:
+        filtered = bookings;
     }
+
+    // Sort based on date
+    filtered.sort((a, b) {
+      final dateTimeA = _getBookingDateTime(a);
+      final dateTimeB = _getBookingDateTime(b);
+      
+      if (dateTimeA == null) return 1;
+      if (dateTimeB == null) return -1;
+      
+      if (selectedFilter == 'Upcoming') {
+        return dateTimeA.compareTo(dateTimeB); // Ascending for upcoming
+      } else {
+        return dateTimeB.compareTo(dateTimeA); // Descending for past/cancelled
+      }
+    });
     
     return filtered;
   }
 
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+  
   @override
   Widget build(BuildContext context) {
     final filteredBookings = _getFilteredBookings();
@@ -507,7 +440,7 @@ class _ManageBookingsState extends State<ManageBookings> {
                 selectedFilter = newValue;
               });
             },
-            items: <String>['All', 'Upcoming', 'Past']
+            items: <String>['Upcoming', 'Past', 'Cancelled']
                 .map<DropdownMenuItem<String>>((String value) {
               return DropdownMenuItem<String>(
                 value: value,

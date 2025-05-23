@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart'; // For date and number formatting
-import 'manage_notifications.dart';
 
 // --- db.txt Schema Summary (Relevant Parts) ---
 // TABLE client: client_id (PK), email
@@ -45,12 +44,17 @@ class _BookAppointmentState extends State<BookAppointment> {
   final Color lightPurple = Color.fromRGBO(70, 53, 177, 0.7);
   final Color darkPurple = Color.fromRGBO(70, 53, 177, 0.9);
 
+  // Add these variables at the top of the class
+  TimeOfDay? spaOpeningTime;
+  TimeOfDay? spaClosingTime;
+
   @override
   void initState() {
     super.initState();
     // Fetch data needed for the dropdowns
     _fetchServices();
     _fetchTherapists();
+    _fetchSpaHours(); // Add this line
   }
 
   // --- Data Fetching Functions ---
@@ -103,6 +107,37 @@ class _BookAppointmentState extends State<BookAppointment> {
     }
   }
 
+  // Add this new method to fetch spa hours
+  Future<void> _fetchSpaHours() async {
+    try {
+      final response = await supabase
+          .from('spa')
+          .select('opening_time, closing_time')
+          .eq('spa_id', widget.spaId)
+          .single();
+
+      if (response != null) {
+        setState(() {
+          // Convert time strings to TimeOfDay objects
+          final openingTimeParts = response['opening_time'].split(':');
+          final closingTimeParts = response['closing_time'].split(':');
+          
+          spaOpeningTime = TimeOfDay(
+            hour: int.parse(openingTimeParts[0]),
+            minute: int.parse(openingTimeParts[1])
+          );
+          
+          spaClosingTime = TimeOfDay(
+            hour: int.parse(closingTimeParts[0]),
+            minute: int.parse(closingTimeParts[1])
+          );
+        });
+      }
+    } catch (e) {
+      print("Error fetching spa hours: $e");
+    }
+  }
+
   // --- Date & Time Picker Functions ---
 
   void _selectDate() async {
@@ -136,7 +171,7 @@ class _BookAppointmentState extends State<BookAppointment> {
   }
 
   void _selectStartTime() async {
-    TimeOfDay initialTime = selectedStartTime ?? TimeOfDay(hour: 9, minute: 0);
+    TimeOfDay initialTime = selectedStartTime ?? (spaOpeningTime ?? TimeOfDay(hour: 9, minute: 0));
     TimeOfDay? pickedTime = await showTimePicker(
       context: context,
       initialTime: initialTime,
@@ -149,14 +184,29 @@ class _BookAppointmentState extends State<BookAppointment> {
               surface: Colors.white,
               onSurface: Colors.black87,
             ),
-            timePickerTheme: TimePickerThemeData(), // Use default or customize further
+            timePickerTheme: TimePickerThemeData(),
             dialogBackgroundColor: Colors.white,
           ),
           child: child!,
         );
       },
     );
-    if (pickedTime != null && pickedTime != selectedStartTime) {
+
+    if (pickedTime != null) {
+      // Validate against spa hours
+      if (!_validateSpaHours(pickedTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Selected time must be within spa operating hours: "
+              "${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}"
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       setState(() {
         selectedStartTime = pickedTime;
         // Reset end time if start time changes or if end time is now invalid
@@ -217,6 +267,20 @@ class _BookAppointmentState extends State<BookAppointment> {
     );
 
     if (pickedTime != null) {
+      // Validate against spa hours
+      if (!_validateSpaHours(pickedTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Selected time must be within spa operating hours: "
+              "${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}"
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
       final endMinutes = pickedTime.hour * 60 + pickedTime.minute;
 
       // Validate that end time is strictly after start time
@@ -236,43 +300,31 @@ class _BookAppointmentState extends State<BookAppointment> {
 
   // --- Core Booking Logic ---
 
+  /// Core booking logic with validation and summary
   void _bookAppointment() async {
-    // 1. --- Basic Form Field Validation ---
-    if (selectedDate == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Please select a date.")));
-      return;
-    }
-    if (selectedStartTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Please select a start time.")));
-      return;
-    }
-    if (selectedEndTime == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Please select an end time.")));
-      return;
-    }
-    if (selectedServiceId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Please select a service.")));
-      return;
-    }
+    // 1. Perform validations first
+    if (!_validateBooking()) return;
 
-    // Add conflict check before proceeding
+    // 2. Show booking summary and get confirmation
+    bool proceed = await _showBookingSummary();
+    if (!proceed) return;
+
+    // 3. Check for conflicts
     bool hasConflict = await _hasAppointmentConflict();
-    if (hasConflict) {
-      return;
-    }
+    if (hasConflict) return;
 
     setState(() {
       isLoading = true;
     });
 
-    // 2. --- Format Date and Time ---
-    final String startTime = "${selectedStartTime!.hour.toString().padLeft(2, '0')}:${selectedStartTime!.minute.toString().padLeft(2, '0')}:00";
-    final String endTime = "${selectedEndTime!.hour.toString().padLeft(2, '0')}:${selectedEndTime!.minute.toString().padLeft(2, '0')}:00";
-    final String appointmentDate = DateFormat('yyyy-MM-dd').format(selectedDate!);
-    final String nowTimestamp = DateTime.now().toIso8601String();
-
     try {
-      // 3. --- Identify User and Determine IDs ---
+      // 4. Format date and time
+      final String startTime = "${selectedStartTime!.hour.toString().padLeft(2, '0')}:${selectedStartTime!.minute.toString().padLeft(2, '0')}:00";
+      final String endTime = "${selectedEndTime!.hour.toString().padLeft(2, '0')}:${selectedEndTime!.minute.toString().padLeft(2, '0')}:00";
+      final String appointmentDate = DateFormat('yyyy-MM-dd').format(selectedDate!);
+      final String nowTimestamp = DateTime.now().toIso8601String();
+
+      // 5. Identify User and Determine IDs
       final user = supabase.auth.currentUser;
       if (user == null) {
         throw Exception("User not logged in. Please log in to book.");
@@ -355,95 +407,32 @@ class _BookAppointmentState extends State<BookAppointment> {
           .insert(bookingData)
           .select(); // select() can help verify insertion with RLS
 
-      // 6. --- Handle Success ---
+      // Simplified success handling without notifications
       if (response.isNotEmpty) {
-        final appointmentData = response[0];
-        
-        try {
-          // Get the spa data for notification
-          final spaData = await supabase
-              .from('spa')
-              .select('spa_name, manager_id')
-              .eq('spa_id', widget.spaId)
-              .single();
-
-          // Get therapist name if selected
-          String therapistName = '';
-          if (selectedTherapistId != null) {
-          final therapistData = await supabase
-              .from('therapist')
-              .select('first_name, last_name')
-              .eq('therapist_id', selectedTherapistId!)
-              .single();
-            therapistName = "${therapistData['first_name']} ${therapistData['last_name']}";
-          }
-
-          // Get client name
-          final clientData = await supabase
-              .from('client')
-              .select('first_name, last_name, auth_id')  // Also get auth_id
-              .eq('client_id', bookingClientId)
-              .single();
-          final clientName = "${clientData['first_name']} ${clientData['last_name']}";
-
-          // Create new appointment notification with correct recipient IDs (using auth_ids)
-          await NotificationManager.createNewAppointmentNotification(
-            clientName: clientName,
-            therapistName: therapistName,
-            appointmentTime: DateTime.parse("${appointmentData['booking_date']} ${appointmentData['booking_start_time']}"),
-            spaName: spaData['spa_name'],
-            recipientIds: {
-              'client': clientData['auth_id']?.toString() ?? '',  // Use client's auth_id
-              'therapist': selectedTherapistId?.toString() ?? '',
-              'receptionist': bookingReceptionistId?.toString() ?? '',
-              'manager': spaData['manager_id']?.toString() ?? '',
-            },
-          );
-
-            // First show success message and set a callback
-            if (mounted) {
-              ScaffoldMessenger.of(context)
-                .showSnackBar(
-                  const SnackBar(
-                    content: Text("Appointment booked successfully!"),
-                    backgroundColor: Colors.green,
-                    duration: Duration(seconds: 2),
-                  ),
-                )
-                .closed
-                .then((_) {
-                  // Only navigate after snackbar is shown
-                  if (mounted) {
-                    Navigator.pop(context, true);
-                  }
-                });
-            }
-
-            // Then show system notification
-            await NotificationManager.showLocalNotification(
-              title: "Booking Confirmed!",
-              body: "Your appointment has been scheduled for ${DateFormat('MMM d, yyyy').format(selectedDate!)} at ${selectedStartTime!.format(context)}",
-            );
-
-          } catch (e) {
-          print('Error creating notifications: $e');
-          // Still pop even if notification fails
-          if (mounted) {
-            Navigator.pop(context, true);
-          }
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+            .showSnackBar(
+              const SnackBar(
+                content: Text("Appointment booked successfully!"),
+                backgroundColor: Colors.green,
+                duration: Duration(seconds: 2),
+              ),
+            )
+            .closed
+            .then((_) {
+              if (mounted) {
+                Navigator.pop(context, true);
+              }
+            });
         }
-
       } else {
-         // This case might indicate an issue post-insert or RLS preventing select
-         // It could also mean the insert itself failed silently (less common with Supabase exceptions)
-         print("Warning: Booking insert response was empty. RLS might be blocking select, or insert failed silently.");
-         // Still inform the user but maybe with less certainty
-          ScaffoldMessenger.of(context).showSnackBar(
-             SnackBar(
-                 content: Text("Booking submitted, confirmation pending."),
-                 backgroundColor: Colors.orange),
-          );
-         Navigator.pop(context, true); // Or false depending on how strict you want to be
+        print("Warning: Booking insert response was empty. RLS might be blocking select, or insert failed silently.");
+        ScaffoldMessenger.of(context).showSnackBar(
+           SnackBar(
+               content: Text("Booking submitted, confirmation pending."),
+               backgroundColor: Colors.orange),
+        );
+        Navigator.pop(context, true);
       }
 
     } catch (error) {
@@ -478,6 +467,20 @@ class _BookAppointmentState extends State<BookAppointment> {
           });
       }
     }
+  }
+
+  // Replace the old _bookAppointment method with this updated version
+  void _processBooking() {
+    // Perform validations
+    if (!_validateBooking()) return;
+
+    // Show booking summary and get confirmation
+    _showBookingSummary().then((proceed) {
+      if (proceed) {
+        setState(() => isLoading = true);
+        _bookAppointment();  // Remove await since _bookAppointment is void
+      }
+    });
   }
 
   // --- Appointment Conflict Management ---
@@ -542,53 +545,64 @@ class _BookAppointmentState extends State<BookAppointment> {
     }
   }
 
-  // --- Build Method & UI Helpers ---
+  /// Show booking summary dialog
+  Future<bool> _showBookingSummary() async {
+    final service = services.firstWhere(
+      (s) => s['service_id'] == selectedServiceId,
+      orElse: () => null,
+    );
+    final therapist = therapists.firstWhere(
+      (t) => t['therapist_id'] == selectedTherapistId,
+      orElse: () => null,
+    );
 
-  @override
-  Widget build(BuildContext context) {
-    final DateFormat dateFormatter = DateFormat('EEE, MMM d, yyyy'); // For displaying date
-
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          // Dynamic title based on who might be booking
-          widget.clientIdForBooking == null
-              ? "Book Your Appointment"
-              : "Book Appointment for Client",
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
-          ),
-        backgroundColor: primaryPurple,
-        iconTheme: IconThemeData(color: Colors.white),
-        elevation: 2,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
+    return await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text("Booking Summary"),
+        content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // --- Form Sections ---
-              _buildSectionTitle("Select Date"),
-              _buildDateSelector(dateFormatter),
-              SizedBox(height: 20),
-
-              _buildSectionTitle("Select Time Slot"),
-              _buildTimeSlotSelector(),
-              SizedBox(height: 20),
-
-              _buildSectionTitle("Select Service"),
-              _buildServiceDropdown(),
-              SizedBox(height: 20),
-
-              _buildSectionTitle("Select Preferred Therapist (Optional)"),
-              _buildTherapistDropdown(),
-              SizedBox(height: 30), // Spacing before button
-
-              // --- Booking Button ---
-              _buildBookingButton(),
+              _summaryItem("Date", DateFormat('MMM dd, yyyy').format(selectedDate!)),
+              _summaryItem("Time", "${selectedStartTime!.format(context)} - ${selectedEndTime!.format(context)}"),
+              _summaryItem("Service", "${service?['service_name'] ?? 'N/A'}"),
+              _summaryItem("Price", "₱${service?['service_price'] ?? 0}"),
+              if (therapist != null)
+                _summaryItem("Therapist", "${therapist['first_name']} ${therapist['last_name']}"),
             ],
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text("Book Now"),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryPurple,
+            ),
+          ),
+        ],
+      ),
+    ) ?? false;
+  }
+
+  Widget _summaryItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text("$label:", style: TextStyle(fontWeight: FontWeight.bold)),
+          ),
+          Expanded(child: Text(value)),
+        ],
       ),
     );
   }
@@ -816,7 +830,7 @@ class _BookAppointmentState extends State<BookAppointment> {
       width: double.infinity, // Make button take full width
       child: ElevatedButton(
         // Disable button when loading, otherwise call _bookAppointment
-        onPressed: isLoading ? null : _bookAppointment,
+        onPressed: isLoading ? null : _processBooking,  // Updated to use _processBooking
         style: ElevatedButton.styleFrom(
           backgroundColor: primaryPurple, // Main button color
           foregroundColor: Colors.white, // Text color
@@ -850,6 +864,126 @@ class _BookAppointmentState extends State<BookAppointment> {
               ),
             )
           : Text("Confirm Booking"), // Button text
+      ),
+    );
+  }
+
+  // Add this new validation method
+  bool _validateSpaHours(TimeOfDay time) {
+    if (spaOpeningTime == null || spaClosingTime == null) return true;
+
+    // Convert TimeOfDay to minutes since midnight for easier comparison
+    int timeInMinutes = time.hour * 60 + time.minute;
+    int openingInMinutes = spaOpeningTime!.hour * 60 + spaOpeningTime!.minute;
+    int closingInMinutes = spaClosingTime!.hour * 60 + spaClosingTime!.minute;
+
+    return timeInMinutes >= openingInMinutes && timeInMinutes <= closingInMinutes;
+  }
+
+  // Update the existing _validateBooking method
+  bool _validateBooking() {
+    if (selectedDate == null) {
+      _showError("Please select a date.");
+      return false;
+    }
+
+    // Validate date is not in the past
+    if (selectedDate!.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
+      _showError("Cannot book appointments for past dates.");
+      return false;
+    }
+
+    if (selectedStartTime == null || selectedEndTime == null) {
+      _showError("Please select both start and end times.");
+      return false;
+    }
+
+    // Convert times to DateTime for comparison
+    final now = DateTime.now();
+    final startDateTime = DateTime(
+      selectedDate!.year,
+      selectedDate!.month,
+      selectedDate!.day,
+      selectedStartTime!.hour,
+      selectedStartTime!.minute,
+    );
+
+    // If booking for today, ensure time is in the future
+    if (selectedDate!.day == now.day &&
+        selectedDate!.month == now.month &&
+        selectedDate!.year == now.year &&
+        startDateTime.isBefore(now)) {
+      _showError("Cannot book appointments for past times.");
+      return false;
+    }
+
+    if (selectedServiceId == null) {
+      _showError("Please select a service.");
+      return false;
+    }
+
+    // Add spa hours validation
+    if (spaOpeningTime != null && spaClosingTime != null) {
+      if (!_validateSpaHours(selectedStartTime!) || !_validateSpaHours(selectedEndTime!)) {
+        _showError(
+          "Booking time must be within spa operating hours: "
+          "${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}"
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final DateFormat dateFormatter = DateFormat('EEE, MMM d, yyyy');
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.clientIdForBooking == null
+              ? "Book Your Appointment"
+              : "Book Appointment for Client",
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+        ),
+        backgroundColor: primaryPurple,
+        iconTheme: IconThemeData(color: Colors.white),
+        elevation: 2,
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSectionTitle("Select Date"),
+              _buildDateSelector(dateFormatter),
+              SizedBox(height: 20),
+
+              _buildSectionTitle("Select Time Slot"),
+              _buildTimeSlotSelector(),
+              SizedBox(height: 20),
+
+              _buildSectionTitle("Select Service"),
+              _buildServiceDropdown(),
+              SizedBox(height: 20),
+
+              _buildSectionTitle("Select Preferred Therapist (Optional)"),
+              _buildTherapistDropdown(),
+              SizedBox(height: 30),
+
+              _buildBookingButton(),
+            ],
+          ),
+        ),
       ),
     );
   }
