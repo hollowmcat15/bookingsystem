@@ -44,24 +44,36 @@ class _ManageSpaState extends State<ManageSpa> {
   String? _currentImageUrl;
   bool _isUploadingImage = false;
   
+  // Add new controllers for time fields
+  TimeOfDay? _openingTime;
+  TimeOfDay? _closingTime;
+  List<Map<String, dynamic>> _archivedServices = [];
+  
   @override
   void initState() {
     super.initState();
     _fetchSpaAndServices();
+    _fetchArchivedServices(); // Add this line
   }
-  
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _addressController.dispose();
-    _postalCodeController.dispose();
-    _phoneNumberController.dispose();
-    _descriptionController.dispose();
-    _serviceNameController.dispose();
-    _servicePriceController.dispose();
-    super.dispose();
+
+  Future<void> _fetchArchivedServices() async {
+    if (widget.spaId == null) return;  // Early return if spaId is null
+    
+    try {
+      final archivedResponse = await supabase
+          .from('archived_service')
+          .select()
+          .eq('spa_id', widget.spaId!) // Use non-null assertion since we checked above
+          .order('archived_at', ascending: false);
+      
+      setState(() {
+        _archivedServices = List<Map<String, dynamic>>.from(archivedResponse);
+      });
+    } catch (e) {
+      print('Error fetching archived services: $e');
+    }
   }
-  
+
   /// Fetch spa details and services from the database
   Future<void> _fetchSpaAndServices() async {
     try {
@@ -115,6 +127,16 @@ class _ManageSpaState extends State<ManageSpa> {
               _phoneNumberController.text = spa!['spa_phonenumber'] ?? '';
               _descriptionController.text = spa!['description'] ?? '';
               _currentImageUrl = spa!['image_url'];
+              
+              // Parse opening and closing times
+              if (spa!['opening_time'] != null) {
+                final openTime = TimeOfDay.fromDateTime(DateTime.parse('2000-01-01 ${spa!['opening_time']}'));
+                _openingTime = openTime;
+              }
+              if (spa!['closing_time'] != null) {
+                final closeTime = TimeOfDay.fromDateTime(DateTime.parse('2000-01-01 ${spa!['closing_time']}'));
+                _closingTime = closeTime;
+              }
             }
             
             isLoading = false;
@@ -172,22 +194,34 @@ class _ManageSpaState extends State<ManageSpa> {
   
   /// Update existing spa in the database
   Future<void> _updateSpa() async {
-    if (!_spaFormKey.currentState!.validate() || spa == null) return;
-    
+    if (!_spaFormKey.currentState!.validate()) return;
+
     try {
       final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
       final String? newImageUrl = await _uploadImage();
-      
+
+      String? openingTimeStr;
+      String? closingTimeStr;
+
+      if (_openingTime != null) {
+        openingTimeStr = '${_openingTime!.hour.toString().padLeft(2, '0')}:${_openingTime!.minute.toString().padLeft(2, '0')}:00';
+      }
+      if (_closingTime != null) {
+        closingTimeStr = '${_closingTime!.hour.toString().padLeft(2, '0')}:${_closingTime!.minute.toString().padLeft(2, '0')}:00';
+      }
+
       await supabase.from('spa').update({
         'spa_name': _nameController.text,
         'spa_address': _addressController.text,
         'postal_code': _postalCodeController.text,
         'spa_phonenumber': _phoneNumberController.text,
         'description': _descriptionController.text,
+        'opening_time': openingTimeStr,
+        'closing_time': closingTimeStr,
         'image_url': newImageUrl ?? _currentImageUrl,
         'updated_at': today
       }).eq('spa_id', spa!['spa_id']);
-      
+
       _fetchSpaAndServices();
       _showSuccessSnackBar('Spa updated successfully!');
     } catch (e) {
@@ -259,53 +293,59 @@ class _ManageSpaState extends State<ManageSpa> {
     }
   }
   
-  /// Delete service from the database
-  Future<void> _deleteService(int serviceId) async {
+  /// Archive service instead of deleting
+  Future<void> _archiveService(int serviceId, String serviceName, double servicePrice) async {
     try {
-      // Check for any appointments using this service
-      final appointmentsResponse = await supabase
-          .from('appointment')
-          .select('book_id')
-          .eq('service_id', serviceId);
-      
-      if (appointmentsResponse.isNotEmpty) {
-        _showErrorSnackBar(
-          'Cannot delete this service because it is used in appointments. '
-          'Please update those appointments first.'
-        );
-        return;
-      }
-      
+      // First, insert into archived_service
+      await supabase.from('archived_service').insert({
+        'service_id': serviceId,
+        'spa_id': spa!['spa_id'],
+        'service_name': serviceName,
+        'service_price': servicePrice,
+        'archived_at': DateTime.now().toIso8601String(),
+      });
+
+      // Then delete from active services
       await supabase
           .from('service')
           .delete()
           .eq('service_id', serviceId);
-      
-      _fetchServicesForSpa(spa!['spa_id']);
-      _showSuccessSnackBar('Service deleted successfully!');
+
+      _fetchSpaAndServices();
+      _fetchArchivedServices();
+      _showSuccessSnackBar('Service archived successfully!');
     } catch (e) {
-      _showErrorSnackBar('Error deleting service: $e');
+      _showErrorSnackBar('Error archiving service: $e');
     }
   }
-  
-  /// Load service data into form for editing
-  void _editService(Map<String, dynamic> service) {
-    setState(() {
-      selectedService = service;
-      _serviceNameController.text = service['service_name'] ?? '';
-      _servicePriceController.text = service['service_price'].toString();
-    });
+
+  /// Restore archived service
+  Future<void> _restoreService(Map<String, dynamic> archivedService) async {
+    try {
+      // First, insert back into services
+      await supabase.from('service').insert({
+        'service_id': archivedService['service_id'],
+        'spa_id': spa!['spa_id'],
+        'service_name': archivedService['service_name'],
+        'service_price': archivedService['service_price'],
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      });
+
+      // Then delete from archived_service
+      await supabase
+          .from('archived_service')
+          .delete()
+          .eq('service_id', archivedService['service_id']);
+
+      _fetchSpaAndServices();
+      _fetchArchivedServices();
+      _showSuccessSnackBar('Service restored successfully!');
+    } catch (e) {
+      _showErrorSnackBar('Error restoring service: $e');
+    }
   }
-  
-  /// Clear service form and reset selected service
-  void _clearServiceForm() {
-    _serviceNameController.clear();
-    _servicePriceController.clear();
-    setState(() {
-      selectedService = null;
-    });
-  }
-  
+
   /// Show a success message
   void _showSuccessSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -396,14 +436,14 @@ class _ManageSpaState extends State<ManageSpa> {
     );
   }
   
-  /// Show confirmation dialog before deleting a service
-  void _showDeleteServiceConfirmation(int serviceId, String serviceName) {
+  /// Show confirmation dialog before archiving a service
+  void _showDeleteServiceConfirmation(int serviceId, String serviceName, double servicePrice) { // Add servicePrice parameter
     showDialog(
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Delete Service'),
-          content: Text('Are you sure you want to delete "$serviceName"? This action cannot be undone.'),
+          title: const Text('Archive Service'),
+          content: Text('Are you sure you want to archive "$serviceName"?\nArchived services can be restored later.'),
           actions: [
             TextButton(
               onPressed: () {
@@ -414,9 +454,9 @@ class _ManageSpaState extends State<ManageSpa> {
             TextButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _deleteService(serviceId);
+                _archiveService(serviceId, serviceName, servicePrice); // Pass actual service price
               },
-              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+              child: const Text('Archive', style: TextStyle(color: Colors.orange)),
             ),
           ],
         );
@@ -510,38 +550,27 @@ class _ManageSpaState extends State<ManageSpa> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Manage Spa'),
+    return DefaultTabController(
+      length: 3,  // Changed from 2 to 3
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Manage Spa'),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: 'Spa Information'),
+              Tab(text: 'Active Services'),
+              Tab(text: 'Archived Services'),  // New tab
+            ],
+          ),
+        ),
+        body: TabBarView(
+          children: [
+            _buildSpaInfoTab(),
+            _buildServicesTab(),
+            _buildArchivedServicesTab(),  // New tab content
+          ],
+        ),
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : spa == null
-              ? const Center(child: Text('No spa found to manage.'))
-              : DefaultTabController(
-                  length: 2,
-                  child: Column(
-                    children: [
-                      const TabBar(
-                        tabs: [
-                          Tab(text: 'Spa Information'),
-                          Tab(text: 'Services'),
-                        ],
-                        labelColor: Colors.blue,
-                      ),
-                      Expanded(
-                        child: TabBarView(
-                          children: [
-                            // Spa Information Tab
-                            _buildSpaInfoTab(),
-                            // Services Tab
-                            _buildServicesTab(),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
     );
   }
   
@@ -662,6 +691,41 @@ class _ManageSpaState extends State<ManageSpa> {
               ),
               maxLines: 5,
             ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: ListTile(
+                    title: Text('Opening Time'),
+                    subtitle: Text(_openingTime?.format(context) ?? 'Not set'),
+                    onTap: () async {
+                      final TimeOfDay? time = await showTimePicker(
+                        context: context,
+                        initialTime: _openingTime ?? TimeOfDay(hour: 9, minute: 0),
+                      );
+                      if (time != null) {
+                        setState(() => _openingTime = time);
+                      }
+                    },
+                  ),
+                ),
+                Expanded(
+                  child: ListTile(
+                    title: Text('Closing Time'),
+                    subtitle: Text(_closingTime?.format(context) ?? 'Not set'),
+                    onTap: () async {
+                      final TimeOfDay? time = await showTimePicker(
+                        context: context,
+                        initialTime: _closingTime ?? TimeOfDay(hour: 17, minute: 0),
+                      );
+                      if (time != null) {
+                        setState(() => _closingTime = time);
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
             const SizedBox(height: 24),
             Align(
               alignment: Alignment.centerRight,
@@ -733,11 +797,13 @@ class _ManageSpaState extends State<ManageSpa> {
                                 },
                               ),
                               IconButton(
-                                icon: const Icon(Icons.delete, color: Colors.red),
+                                icon: const Icon(Icons.archive, color: Colors.orange), // Changed from delete to archive
+                                tooltip: 'Archive Service', // Added tooltip
                                 onPressed: () {
                                   _showDeleteServiceConfirmation(
                                     service['service_id'],
                                     service['service_name'],
+                                    service['service_price'].toDouble(), // Pass the actual price
                                   );
                                 },
                               ),
@@ -751,5 +817,66 @@ class _ManageSpaState extends State<ManageSpa> {
         ],
       ),
     );
+  }
+
+  // Add new widget for archived services tab
+  Widget _buildArchivedServicesTab() {
+    return Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Archived Services',
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _archivedServices.isEmpty
+                ? Center(
+                    child: Text(
+                      'No archived services.',
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _archivedServices.length,
+                    itemBuilder: (context, index) {
+                      final service = _archivedServices[index];
+                      return Card(
+                        child: ListTile(
+                          title: Text(service['service_name'] ?? 'Unnamed Service'),
+                          subtitle: Text('₱${service['service_price'].toStringAsFixed(2)}'),
+                          trailing: TextButton.icon(
+                            icon: Icon(Icons.restore),
+                            label: Text('Restore'),
+                            onPressed: () => _restoreService(service),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Add this method to clear service form
+  void _clearServiceForm() {
+    setState(() {
+      _serviceNameController.clear();
+      _servicePriceController.clear();
+      selectedService = null;
+    });
+  }
+
+  // Add this method to load service data for editing
+  void _editService(Map<String, dynamic> service) {
+    setState(() {
+      selectedService = service;
+      _serviceNameController.text = service['service_name'] ?? '';
+      _servicePriceController.text = service['service_price']?.toString() ?? '';
+    });
   }
 }

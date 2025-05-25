@@ -187,7 +187,7 @@ class ServiceModel {
 }
 
 class TherapistModel {
-  final int therapistId;
+  final int staffId;  // Changed from therapistId
   final String firstName;
   final String lastName;
   final String? email;
@@ -195,7 +195,7 @@ class TherapistModel {
   final String status;
 
   TherapistModel({
-    required this.therapistId,
+    required this.staffId,  // Changed from therapistId
     required this.firstName,
     required this.lastName,
     this.email,
@@ -206,9 +206,9 @@ class TherapistModel {
   String get fullName => '$firstName $lastName'.trim();
 
   factory TherapistModel.fromJson(Map<String, dynamic> json) {
-    if (json['therapist_id'] == null) throw FormatException("Missing therapist_id");
+    if (json['staff_id'] == null) throw FormatException("Missing staff_id");  // Changed from therapist_id
     return TherapistModel(
-      therapistId: json['therapist_id'],
+      staffId: json['staff_id'],  // Changed from therapist_id
       firstName: json['first_name'] ?? '',
       lastName: json['last_name'] ?? '',
       email: json['email'],
@@ -240,6 +240,8 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
   bool _isLoadingPast = false;
   bool _isLoadingClients = false;
   bool _isRefreshing = false;
+  String _selectedFilter = 'All'; // Add this line
+  final List<String> _filterOptions = ['All', 'Scheduled', 'Completed', 'Cancelled', 'Rescheduled'];
 
   @override
   void initState() {
@@ -302,7 +304,7 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
       // final testResponse = await _supabase.from('spa').select('spa_id').limit(1);
       // print("[FetchUpcoming] Connection test: ${testResponse is List ? 'Success' : 'Failed'}");
 
-      // Fixed query with explicit casting and status check
+      // Remove status filter from query to get all appointments
       final response = await _supabase
           .from('appointment')
           .select('''
@@ -314,7 +316,6 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
           ''')
           .eq('spa_id', widget.spaId)
           .gte('booking_date', todayIso)
-          .or('status.eq.Scheduled,status.eq.Rescheduled') // Alternative syntax for filter
           .order('booking_date', ascending: true)
           .order('booking_start_time', ascending: true);
 
@@ -338,7 +339,7 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
         return []; // Return empty list early
       }
 
-      List<AppointmentModel> mappedAppointments = [];
+      final List<AppointmentModel> mappedAppointments = [];
       int mappingErrors = 0;
 
       for (var i = 0; i < responseData.length; i++) {
@@ -721,30 +722,29 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
   }
 
   Future<void> _showCancelConfirmation(AppointmentModel appointment) async {
-    if (appointment.status != 'Scheduled' && appointment.status != 'Rescheduled') {
-       if (mounted) {
-           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Only Scheduled or Rescheduled appointments can be cancelled.')));
-       }
-      return;
-    }
-    final result = await showDialog<bool>(
+    final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel Appointment'),
-        content: Text('Are you sure you want to cancel the appointment for ${appointment.clientName} on ${DateFormat('MMM d, yyyy').format(appointment.bookingDate)}?'),
+        content: Text(
+          'Are you sure you want to cancel the appointment for ${appointment.clientName} on ${DateFormat('MMM d, yyyy').format(appointment.bookingDate)}?\n\nThis action cannot be undone.'
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('No')),
+          TextButton(
+            child: const Text('No, Keep It'),
+            onPressed: () => Navigator.of(context).pop(false),
+          ),
           TextButton(
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            onPressed: () => Navigator.of(context).pop(true),
             child: const Text('Yes, Cancel'),
+            onPressed: () => Navigator.of(context).pop(true),
           ),
         ],
       ),
     );
-    if (mounted && result == true) { // Check mounted before async call
-       await _cancelAppointment(appointment);
-       // Reload happens inside _cancelAppointment if successful
+
+    if (confirmed == true) {
+      await _cancelAppointment(appointment);
     }
   }
 
@@ -841,14 +841,58 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
   }
   // --- END NEW FUNCTION ---
 
+  // Add filter state and update UI elements:
+  List<AppointmentModel> _getFilteredAppointments(List<AppointmentModel> appointments) {
+    if (_selectedFilter == 'All') return appointments;
+    
+    // Apply the filter
+    return appointments.where((appointment) {
+      switch (_selectedFilter) {
+        case 'Scheduled':
+          return appointment.status == 'Scheduled';
+        case 'Completed':
+          return appointment.status == 'Completed';
+        case 'Cancelled':
+          return appointment.status == 'Cancelled';
+        case 'Rescheduled':
+          return appointment.status == 'Rescheduled';
+        default:
+          return true;
+      }
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage Appointments'),
+        title: const Text('Manage Appointments', style: TextStyle(color: Colors.black87)),
+        backgroundColor: Colors.white,
+        iconTheme: const IconThemeData(color: Colors.black87),
+        elevation: 1,
         actions: [
+          // Add filter dropdown with consistent styling
+          DropdownButton<String>(
+            value: _selectedFilter,
+            dropdownColor: Colors.white,
+            style: const TextStyle(color: Colors.black87, fontSize: 16),
+            underline: Container(),
+            icon: const Icon(Icons.filter_list, color: Colors.black87),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            items: _filterOptions.map((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(value),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                setState(() => _selectedFilter = newValue);
+              }
+            },
+          ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, color: Colors.black87),
             onPressed: _isRefreshing ? null : _loadAppointments,
             tooltip: 'Refresh Appointments',
           ),
@@ -856,84 +900,42 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
       ),
       body: Column(
         children: [
+          // New Booking button section - UPDATED
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // Past Bookings Button
-                ElevatedButton.icon(
-                  icon: _isLoadingPast
-                    ? SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Theme.of(context).colorScheme.onPrimary
-                        )
-                      )
-                    : const Icon(Icons.history),
-                  label: const Text('Past Bookings'),
-                  onPressed: _isLoadingPast ? null : _showPastAppointmentsDialog,
-                ),
-                
-                // NEW: Completed Appointments Button
-                ElevatedButton.icon(
-                  icon: _isLoadingPast
-                    ? SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Theme.of(context).colorScheme.onPrimary
-                        )
-                      )
-                    : const Icon(Icons.check_circle),
-                  label: const Text('Completed'),
-                  onPressed: _isLoadingPast ? null : _showCompletedAppointmentsDialog,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                ),
-                
-                // New Booking Button
+                // Fix the New Booking Button
                 ElevatedButton.icon(
                   icon: _isLoadingClients
-                    ? SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Theme.of(context).colorScheme.onPrimary
-                        )
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
                       )
-                    : const Icon(Icons.add),
-                  label: const Text('New Booking'),
+                    : const Icon(Icons.add, color: Colors.white),
+                  label: const Text('New', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue,
+                    elevation: 2,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
                   onPressed: _isLoadingClients ? null : _showNewAppointmentDialog,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.teal),
                 ),
               ],
             ),
           ),
-
-          // Show a loading indicator if explicitly refreshing
-          if (_isRefreshing)
-            const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Center(child: CircularProgressIndicator()),
-            ),
+          // Future Builder section
           Expanded(
             child: FutureBuilder<List<AppointmentModel>>(
-              key: ValueKey(_isRefreshing), // Add key to force rebuild
+              key: ValueKey(_isRefreshing),
               future: _upcomingAppointments,
               builder: (context, snapshot) {
-                // print("[FutureBuilder] Connection State: ${snapshot.connectionState}");
-
                 if (snapshot.connectionState == ConnectionState.waiting && !_isRefreshing) {
-                  // print("[FutureBuilder] Waiting for data...");
                   return const Center(child: CircularProgressIndicator());
                 }
 
                 if (snapshot.hasError) {
-                  print("[FutureBuilder] Error received: ${snapshot.error}");
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -945,9 +947,7 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
                   );
                 }
 
-                // Only check for data if we're not in an error state
                 if (!snapshot.hasData || snapshot.data == null) {
-                  print("[FutureBuilder] No data received");
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(16.0),
@@ -959,27 +959,22 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
                   );
                 }
 
-                final appointments = snapshot.data!;
+                final appointments = _getFilteredAppointments(snapshot.data!);
 
                 if (appointments.isEmpty) {
-                  print("[FutureBuilder] Empty appointments list");
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(16.0),
-                      child: Text(
-                        'No upcoming appointments found.',
-                        style: TextStyle(fontSize: 16, color: Colors.grey)
-                      ),
-                    )
+                  return Center(
+                    child: Text(
+                      _selectedFilter == 'All' 
+                        ? 'No appointments found.'
+                        : 'No ${_selectedFilter.toLowerCase()} appointments found.',
+                      style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                    ),
                   );
                 }
 
-                print("[FutureBuilder] Building list with ${appointments.length} items");
-                // Complete the RefreshIndicator and ListView implementation
                 return RefreshIndicator(
                   onRefresh: () async {
                     _loadAppointments();
-                    // Wait for the future to complete before ending refresh
                     await _upcomingAppointments;
                   },
                   child: ListView.builder(
@@ -991,9 +986,7 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
                         isPast: false,
                         onReschedule: _showRescheduleDialog,
                         onCancel: _showCancelConfirmation,
-                        // --- NEW: Pass the mark complete function ---
                         onMarkComplete: _markAppointmentComplete,
-                        // --- END NEW ---
                       );
                     },
                   ),
@@ -1003,11 +996,7 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showNewAppointmentDialog,
-        tooltip: 'Book New Appointment',
-        child: const Icon(Icons.add),
-      ),
+      // Remove the floating action button - we already have a New button in the top section
     );
   }
 }
@@ -1215,150 +1204,207 @@ class RescheduleAppointmentPage extends StatefulWidget {
 class _RescheduleAppointmentPageState extends State<RescheduleAppointmentPage> {
   final SupabaseClient _supabase = Supabase.instance.client;
   DateTime _selectedDate = DateTime.now();
-  TimeOfDay _selectedStartTime = const TimeOfDay(hour: 9, minute: 0);
-  TimeOfDay _selectedEndTime = const TimeOfDay(hour: 10, minute: 0);
+  TimeOfDay? _selectedStartTime;  // Changed to nullable
+  TimeOfDay? _selectedEndTime;    // Changed to nullable
   List<TherapistModel> _availableTherapists = [];
   TherapistModel? _selectedTherapist;
   bool _isLoading = false;
   bool _isSubmitting = false;
+  TimeOfDay? spaOpeningTime;
+  TimeOfDay? spaClosingTime;
 
   @override
   void initState() {
     super.initState();
-    // Initialize with the current appointment values
     _selectedDate = widget.appointment.bookingDate;
     _selectedStartTime = widget.appointment.bookingStartTime;
     _selectedEndTime = widget.appointment.bookingEndTime;
     _loadAvailableTherapists();
+    _fetchSpaHours(); // Add this line
   }
 
-  Future<void> _loadAvailableTherapists() async {
-    if (!mounted) return;
-    setState(() {
-      _isLoading = true;
-    });
-
+  // Add this method to fetch spa hours
+  Future<void> _fetchSpaHours() async {
     try {
-      // Fetch therapists that are available for the selected time slot
       final response = await _supabase
-          .from('therapist')
-          .select('therapist_id, first_name, last_name, email, phonenumber, status')
+          .from('spa')
+          .select('opening_time, closing_time')
           .eq('spa_id', widget.appointment.spaId)
-          .eq('status', 'Active'); // Consider adding more sophisticated availability checks later
+          .single();
 
-      if (!mounted) return;
-
-      if (response is! List) {
-        throw Exception("Unexpected data format received from Supabase.");
-      }
-
-      final therapists = response
-          .map((therapist) => TherapistModel.fromJson(therapist))
-          .toList();
-
-      setState(() {
-        _availableTherapists = therapists;
-
-        // Try to pre-select the current therapist if they exist and are active
-        if (_availableTherapists.isNotEmpty) {
-             _selectedTherapist = _availableTherapists.firstWhere(
-               (t) => t.therapistId == widget.appointment.therapistId,
-               orElse: () {
-                  // If current therapist not found (e.g., inactive), select the first available
-                  print("[Reschedule] Current therapist ${widget.appointment.therapistId} not found or inactive in available list. Selecting first available.");
-                  return _availableTherapists.first;
-               }
-             );
-           } else {
-             print("[Reschedule] No active therapists found for spa ${widget.appointment.spaId}.");
-             _selectedTherapist = null; // No therapist to select
-           }
-        _isLoading = false;
-      });
-    } catch (e) {
-      print('[RescheduleAppointment] Error loading therapists: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error loading therapists: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
+      if (response != null) {
         setState(() {
-          _isLoading = false;
+          final openingTimeParts = response['opening_time'].split(':');
+          final closingTimeParts = response['closing_time'].split(':');
+          
+          spaOpeningTime = TimeOfDay(
+            hour: int.parse(openingTimeParts[0]),
+            minute: int.parse(openingTimeParts[1])
+          );
+          
+          spaClosingTime = TimeOfDay(
+            hour: int.parse(closingTimeParts[0]),
+            minute: int.parse(closingTimeParts[1])
+          );
         });
       }
+    } catch (e) {
+      print("Error fetching spa hours: $e");
     }
   }
 
+  // Add helper method to convert TimeOfDay to minutes
+  int _timeToMinutes(TimeOfDay time) {
+    return time.hour * 60 + time.minute;
+  }
+
+  // Add validation method for spa hours
+  bool _validateSpaHours(TimeOfDay time) {
+    if (spaOpeningTime == null || spaClosingTime == null) return true;
+
+    int timeInMinutes = _timeToMinutes(time);
+    int openingInMinutes = _timeToMinutes(spaOpeningTime!);
+    int closingInMinutes = _timeToMinutes(spaClosingTime!);
+
+    if (closingInMinutes < openingInMinutes) {
+      closingInMinutes += 24 * 60;
+      if (timeInMinutes < openingInMinutes) {
+        timeInMinutes += 24 * 60;
+      }
+    }
+
+    return timeInMinutes >= openingInMinutes && timeInMinutes <= closingInMinutes;
+  }
+
+  // Modify the date selection method
   Future<void> _selectDate(BuildContext context) async {
+    final now = DateTime.now();
     final DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: _selectedDate,
-      firstDate: DateTime.now().subtract(const Duration(days: 1)), // Allow selecting today
-      lastDate: DateTime.now().add(const Duration(days: 90)),
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
     );
 
     if (pickedDate != null && pickedDate != _selectedDate) {
-      if (mounted) {
-        setState(() {
-          _selectedDate = pickedDate;
-        });
-      }
+      setState(() {
+        _selectedDate = pickedDate;
+        // Reset times when date changes to today
+        if (pickedDate.year == now.year && 
+            pickedDate.month == now.month && 
+            pickedDate.day == now.day) {
+          _selectedStartTime = spaOpeningTime;  // Use spa opening time or null
+          _selectedEndTime = null;
+        }
+      });
     }
   }
 
+  // Modify the start time selection method
   Future<void> _selectStartTime(BuildContext context) async {
-    final TimeOfDay? pickedTime = await showTimePicker(
+    if (_selectedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please select a date first'))
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final isToday = _selectedDate!.year == now.year && 
+                    _selectedDate!.month == now.month && 
+                    _selectedDate!.day == now.day;
+
+    TimeOfDay minimumTime = isToday 
+        ? TimeOfDay.now() 
+        : spaOpeningTime ?? TimeOfDay(hour: 9, minute: 0);
+
+    TimeOfDay? pickedTime = await showTimePicker(
       context: context,
-      initialTime: _selectedStartTime,
+      initialTime: _selectedStartTime ?? minimumTime,
     );
 
-    if (pickedTime != null && pickedTime != _selectedStartTime) {
-       if (mounted) {
-           setState(() {
-             _selectedStartTime = pickedTime;
-             // Simple duration assumption - adjust if needed
-             final int endMinutes = pickedTime.hour * 60 + pickedTime.minute + 60; // Assume 1 hour duration
-             _selectedEndTime = TimeOfDay(
-               hour: (endMinutes ~/ 60) % 24,
-               minute: endMinutes % 60,
-             );
-           });
-       }
+    if (pickedTime != null) {
+      // Validate against minimum time for today
+      if (isToday && _timeToMinutes(pickedTime) < _timeToMinutes(minimumTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Cannot select a time in the past'))
+        );
+        return;
+      }
+
+      // Validate against spa hours
+      if (!_validateSpaHours(pickedTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(
+            'Selected time must be within spa operating hours: ' +
+            '${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}'
+          ))
+        );
+        return;
+      }
+
+      setState(() {
+        _selectedStartTime = pickedTime;
+        _selectedEndTime = null; // Reset end time
+      });
     }
   }
 
+  // Modify the end time selection method
   Future<void> _selectEndTime(BuildContext context) async {
-    final TimeOfDay? pickedTime = await showTimePicker(
+    if (_selectedStartTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please select a start time first'))
+      );
+      return;
+    }
+
+    TimeOfDay? pickedTime = await showTimePicker(
       context: context,
-      initialTime: _selectedEndTime,
+      initialTime: _selectedEndTime ?? TimeOfDay(
+        hour: (_selectedStartTime!.hour + 1) % 24,
+        minute: _selectedStartTime!.minute
+      ),
     );
 
-    if (pickedTime != null && pickedTime != _selectedEndTime) {
-       // Basic validation: End time must be after start time
-       final startMinutes = _selectedStartTime.hour * 60 + _selectedStartTime.minute;
-       final endMinutes = pickedTime.hour * 60 + pickedTime.minute;
-       if (endMinutes <= startMinutes) {
-           if (mounted) {
-               ScaffoldMessenger.of(context).showSnackBar(
-                 const SnackBar(content: Text('End time must be after start time.'), backgroundColor: Colors.orange),
-               );
-           }
-           return; // Don't update if invalid
-       }
-       if (mounted) {
-           setState(() {
-               _selectedEndTime = pickedTime;
-           });
-       }
+    if (pickedTime != null) {
+      // Validate against spa hours
+      if (!_validateSpaHours(pickedTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(
+            'Selected time must be within spa operating hours: ' +
+            '${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}'
+          ))
+        );
+        return;
+      }
+
+      // Validate end time is after start time
+      if (_timeToMinutes(pickedTime) <= _timeToMinutes(_selectedStartTime!)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('End time must be after start time'))
+        );
+        return;
+      }
+
+      setState(() => _selectedEndTime = pickedTime);
     }
   }
 
   // Add new method to check for conflicts
   Future<bool> _hasAppointmentConflict() async {
-    final startTimeStr = '${_selectedStartTime.hour.toString().padLeft(2, '0')}:${_selectedStartTime.minute.toString().padLeft(2, '0')}:00';
-    final endTimeStr = '${_selectedEndTime.hour.toString().padLeft(2, '0')}:${_selectedEndTime.minute.toString().padLeft(2, '0')}:00';
+    if (_selectedStartTime == null || _selectedEndTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select both start and end times.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return true;
+    }
+
+    final startTimeStr = '${_selectedStartTime!.hour.toString().padLeft(2, '0')}:${_selectedStartTime!.minute.toString().padLeft(2, '0')}:00';
+    final endTimeStr = '${_selectedEndTime!.hour.toString().padLeft(2, '0')}:${_selectedEndTime!.minute.toString().padLeft(2, '0')}:00';
     final dateStr = _selectedDate.toIso8601String().split('T')[0];
 
     try {
@@ -1397,8 +1443,18 @@ class _RescheduleAppointmentPageState extends State<RescheduleAppointmentPage> {
     }
   }
 
-  // Modify _submitReschedule to include conflict check
+  // Modify _submitReschedule to handle null safely
   Future<void> _submitReschedule() async {
+    if (_selectedStartTime == null || _selectedEndTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select both start and end times.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     if (_selectedTherapist == null && _availableTherapists.isNotEmpty) {
        if (mounted) {
            ScaffoldMessenger.of(context).showSnackBar(
@@ -1435,15 +1491,15 @@ class _RescheduleAppointmentPageState extends State<RescheduleAppointmentPage> {
 
     try {
       // Format the time values as expected by Supabase (HH:MM:SS)
-      final startTimeStr = '${_selectedStartTime.hour.toString().padLeft(2, '0')}:${_selectedStartTime.minute.toString().padLeft(2, '0')}:00';
-      final endTimeStr = '${_selectedEndTime.hour.toString().padLeft(2, '0')}:${_selectedEndTime.minute.toString().padLeft(2, '0')}:00';
+      final startTimeStr = '${_selectedStartTime!.hour.toString().padLeft(2, '0')}:${_selectedStartTime!.minute.toString().padLeft(2, '0')}:00';
+      final endTimeStr = '${_selectedEndTime!.hour.toString().padLeft(2, '0')}:${_selectedEndTime!.minute.toString().padLeft(2, '0')}:00';
       final dateStr = _selectedDate.toIso8601String().split('T')[0]; // YYYY-MM-DD
 
       print("[RescheduleSubmit] Updating Book ID: ${widget.appointment.bookId}");
       print("[RescheduleSubmit] New Date: $dateStr");
       print("[RescheduleSubmit] New Start Time: $startTimeStr");
       print("[RescheduleSubmit] New End Time: $endTimeStr");
-      print("[RescheduleSubmit] New Therapist ID: ${_selectedTherapist!.therapistId}");
+      print("[RescheduleSubmit] New Therapist ID: ${_selectedTherapist!.staffId}");
 
 
       await _supabase
@@ -1452,7 +1508,9 @@ class _RescheduleAppointmentPageState extends State<RescheduleAppointmentPage> {
             'booking_date': dateStr,
             'booking_start_time': startTimeStr,
             'booking_end_time': endTimeStr,
-            'therapist_id': _selectedTherapist!.therapistId,
+            'therapist_id': _selectedTherapist!.staffId,
+            // Change this line to use staff_id from the parent appointment
+            'receptionist_id': widget.appointment.receptionistId,
             'status': 'Rescheduled',
             'updated_at': DateTime.now().toIso8601String(),
           })
@@ -1488,133 +1546,232 @@ class _RescheduleAppointmentPageState extends State<RescheduleAppointmentPage> {
     }
   }
 
+  Future<void> _loadAvailableTherapists() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Updated query to use staff table
+      final response = await _supabase
+          .from('staff')
+          .select('staff_id, first_name, last_name, email, phonenumber, status')
+          .eq('spa_id', widget.appointment.spaId)
+          .eq('role', 'Therapist')  // Add role filter
+          .eq('is_active', true)    // Check if staff is active
+          .eq('status', 'Active');  // Check therapist status
+
+      if (!mounted) return;
+
+      if (response is! List) {
+        throw Exception("Unexpected data format received from Supabase.");
+      }
+
+      final therapists = response
+          .map((therapist) => TherapistModel.fromJson(therapist))
+          .toList();
+
+      setState(() {
+        _availableTherapists = therapists;
+
+        // Try to pre-select the current therapist if they exist and are active
+        if (_availableTherapists.isNotEmpty) {
+          _selectedTherapist = _availableTherapists.firstWhere(
+            (t) => t.staffId == widget.appointment.therapistId,  // Changed from therapistId
+            orElse: () {
+              print("[Reschedule] Current therapist ${widget.appointment.therapistId} not found or inactive in available list. Selecting first available.");
+              return _availableTherapists.first;
+            }
+          );
+        } else {
+          print("[Reschedule] No active therapists found for spa ${widget.appointment.spaId}.");
+          _selectedTherapist = null;
+        }
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('[RescheduleAppointment] Error loading therapists: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading therapists: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    String formattedDate = DateFormat('EEEE, MMM d, yyyy').format(_selectedDate); // More descriptive date format
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Reschedule Appointment'),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Reschedule for ${widget.appointment.clientName}',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Service: ${widget.appointment.serviceName}',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey.shade700),
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Date Selection
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Date'),
-                    subtitle: Text(formattedDate, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                    leading: const Icon(Icons.calendar_today_outlined, color: Colors.teal),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: _isSubmitting ? null : () => _selectDate(context),
-                  ),
-                  const Divider(height: 1),
-
-                  // Time Selection Row
-                   Row(
-                     children: [
-                       Expanded(
-                         child: ListTile(
-                           contentPadding: const EdgeInsets.only(left:0, right: 4),
-                           title: const Text('Start Time'),
-                           subtitle: Text(_selectedStartTime.format(context), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                           leading: const Icon(Icons.access_time_outlined, color: Colors.teal),
-                           trailing: const Icon(Icons.chevron_right),
-                           onTap: _isSubmitting ? null : () => _selectStartTime(context),
-                         ),
-                       ),
-                       Expanded(
-                         child: ListTile(
-                          contentPadding: const EdgeInsets.only(left:4, right: 0),
-                           title: const Text('End Time'),
-                           subtitle: Text(_selectedEndTime.format(context), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                           leading: const Icon(Icons.access_time_filled_outlined, color: Colors.teal), // Slightly different icon
-                           trailing: const Icon(Icons.chevron_right),
-                           onTap: _isSubmitting ? null : () => _selectEndTime(context),
-                         ),
-                       ),
-                     ],
-                   ),
-                   const Divider(height: 1),
-
-
-                  // Therapist Selection
-                  const SizedBox(height: 24),
-                  Text(
-                    'Assign Therapist',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 8),
-                  if (_availableTherapists.isEmpty)
-                    const Padding(
-                       padding: EdgeInsets.symmetric(vertical: 8.0),
-                       child: Text('No active therapists found for this spa.', style: TextStyle(color: Colors.red)),
-                    )
-                  else
-                    DropdownButtonFormField<TherapistModel>(
-                      decoration: InputDecoration(
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                        prefixIcon: const Icon(Icons.person_outline, size: 20),
-                      ),
-                      value: _selectedTherapist,
-                      hint: const Text('Select therapist'),
-                      isExpanded: true,
-                      items: _availableTherapists.map((therapist) {
-                        return DropdownMenuItem<TherapistModel>(
-                          value: therapist,
-                          child: Text(therapist.fullName),
-                        );
-                      }).toList(),
-                      onChanged: _isSubmitting ? null : (TherapistModel? newValue) {
-                        if (mounted) {
-                            setState(() {
-                                _selectedTherapist = newValue;
-                            });
-                        }
-                      },
-                      validator: (value) => value == null ? 'Please select a therapist' : null,
-                    ),
-
-                  const SizedBox(height: 32),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: _isSubmitting
-                          ? Container( // Container to constraint size
-                               width: 20,
-                               height: 20,
-                               padding: const EdgeInsets.all(2.0),
-                               child: const CircularProgressIndicator(strokeWidth: 3, color: Colors.white),
-                             )
-                          : const Icon(Icons.save_outlined),
-                      label: Text(_isSubmitting ? 'Saving...' : 'Confirm Reschedule', style: const TextStyle(fontSize: 16)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.teal,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: _isSubmitting ? null : _submitReschedule,
-                    ),
-                  ),
-                ],
-              ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Reschedule for ${widget.appointment.clientName}',
+              style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600),
             ),
+            const SizedBox(height: 4),
+            Text(
+              'Service: ${widget.appointment.serviceName}',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 24),
+
+            // Date Selection
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Date'),
+              subtitle: Text(DateFormat('EEEE, MMM d, yyyy').format(_selectedDate), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+              leading: const Icon(Icons.calendar_today_outlined, color: Colors.teal),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _isSubmitting ? null : () => _selectDate(context),
+            ),
+            const Divider(height: 1),
+
+            // Time Selection Row
+             Row(
+               children: [
+                 Expanded(
+                   child: ListTile(
+                     contentPadding: const EdgeInsets.only(left: 0, right: 4),
+                     title: const Text('Start Time'),
+                     subtitle: Text(
+                       _selectedStartTime?.format(context) ?? 'Select Start Time', 
+                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)
+                     ),
+                     leading: const Icon(Icons.access_time_outlined, color: Colors.teal),
+                     trailing: const Icon(Icons.chevron_right),
+                     onTap: _isSubmitting ? null : () => _selectStartTime(context),
+                   ),
+                 ),
+                 Expanded(
+                   child: ListTile(
+                     contentPadding: const EdgeInsets.only(left: 4, right: 0),
+                     title: const Text('End Time'),
+                     subtitle: Text(
+                       _selectedEndTime?.format(context) ?? 'Select End Time',
+                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)
+                     ),
+                     leading: const Icon(Icons.access_time_filled_outlined, color: Colors.teal),
+                     trailing: const Icon(Icons.chevron_right),
+                     onTap: _isSubmitting || _selectedStartTime == null 
+                       ? null 
+                       : () => _selectEndTime(context),
+                   ),
+                 ),
+               ],
+             ),
+             const Divider(height: 1),
+
+
+            // Therapist Selection
+            const SizedBox(height: 24),
+            Text(
+              'Assign Therapist',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
+            if (_availableTherapists.isEmpty)
+              const Padding(
+                 padding: EdgeInsets.symmetric(vertical: 8.0),
+                 child: Text('No active therapists found for this spa.', style: TextStyle(color: Colors.red)),
+              )
+            else
+              DropdownButtonFormField<TherapistModel>(
+                decoration: InputDecoration(
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  prefixIcon: const Icon(Icons.person_outline, size: 20),
+                ),
+                value: _selectedTherapist,
+                hint: const Text('Select therapist'),
+                isExpanded: true,
+                items: _availableTherapists.map((therapist) {
+                  return DropdownMenuItem<TherapistModel>(
+                    value: therapist,
+                    child: Text(therapist.fullName),
+                  );
+                }).toList(),
+                onChanged: _isSubmitting ? null : (TherapistModel? newValue) {
+                  if (mounted) {
+                      setState(() {
+                          _selectedTherapist = newValue;
+                      });
+                  }
+                },
+                validator: (value) => value == null ? 'Please select a therapist' : null,
+              ),
+
+            const SizedBox(height: 32),
+            // Replace the existing buttons with this new section
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: BorderSide(color: Colors.teal),
+                      ),
+                    ),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.teal,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: (_isSubmitting || _selectedStartTime == null || _selectedEndTime == null) 
+                      ? null 
+                      : _submitReschedule,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.teal,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      disabledBackgroundColor: Colors.grey,
+                      disabledForegroundColor: Colors.white70,
+                    ),
+                    child: _isSubmitting
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Text(
+                          'Confirm',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

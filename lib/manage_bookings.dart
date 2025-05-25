@@ -18,12 +18,18 @@ class _ManageBookingsState extends State<ManageBookings> {
   bool isLoading = true;
   DateTime? selectedDate;
   TimeOfDay? selectedTime;
+  TimeOfDay? selectedEndTime; // Add this variable
   String? selectedFilter = 'Upcoming'; // Changed default to Upcoming
+
+  // Add these variables for spa hours
+  TimeOfDay? spaOpeningTime;
+  TimeOfDay? spaClosingTime;
 
   @override
   void initState() {
     super.initState();
     _fetchBookings();
+    _fetchSpaHours(); // Add this line
   }
 
   /// Fetch bookings based on user role
@@ -69,22 +75,84 @@ class _ManageBookingsState extends State<ManageBookings> {
     }
   }
 
+  // Add spa hours fetching method
+  Future<void> _fetchSpaHours() async {
+    try {
+      final response = await supabase
+          .from('spa')
+          .select('opening_time, closing_time')
+          .eq('spa_id', widget.userId ?? 1) // Using default value 1 if userId is null
+          .single();
+
+      if (response != null) {
+        setState(() {
+          final openingTimeParts = response['opening_time'].split(':');
+          final closingTimeParts = response['closing_time'].split(':');
+          
+          spaOpeningTime = TimeOfDay(
+            hour: int.parse(openingTimeParts[0]),
+            minute: int.parse(openingTimeParts[1])
+          );
+          
+          spaClosingTime = TimeOfDay(
+            hour: int.parse(closingTimeParts[0]),
+            minute: int.parse(closingTimeParts[1])
+          );
+        });
+      }
+    } catch (e) {
+      print("Error fetching spa hours: $e");
+    }
+  }
+
   /// Cancel Booking (for both roles)
   Future<void> _cancelBooking(int bookingId) async {
-    try {
-      await supabase.from('appointment').update({
-        'status': 'Cancelled',
-        'updated_at': DateFormat('yyyy-MM-dd').format(DateTime.now())
-      }).eq('book_id', bookingId);
-      _fetchBookings();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Booking cancelled successfully')),
-      );
-    } catch (e) {
-      print('Error cancelling booking: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to cancel booking')),
-      );
+    // Show confirmation dialog first
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Cancel Appointment?'),
+          content: const Text(
+            'Are you sure you want to cancel this appointment? This action cannot be undone.'
+          ),
+          actions: [
+            TextButton(
+              child: const Text('No, Keep It'),
+              onPressed: () => Navigator.of(context).pop(false),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Yes, Cancel'),
+              onPressed: () => Navigator.of(context).pop(true),
+            ),
+          ],
+        );
+      },
+    );
+
+    // Only proceed if user confirmed
+    if (confirmed == true) {
+      try {
+        await supabase.from('appointment').update({
+          'status': 'Cancelled',
+          'updated_at': DateFormat('yyyy-MM-dd').format(DateTime.now())
+        }).eq('book_id', bookingId);
+        
+        _fetchBookings();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Booking cancelled successfully')),
+          );
+        }
+      } catch (e) {
+        print('Error cancelling booking: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Failed to cancel booking')),
+          );
+        }
+      }
     }
   }
 
@@ -170,7 +238,36 @@ class _ManageBookingsState extends State<ManageBookings> {
 
   /// Reschedule appointment (for clients)
   Future<void> _rescheduleAppointment(int bookingId, DateTime newDateTime) async {
-    // First check for conflicts
+    // First validate the selected time
+    final selectedTime = TimeOfDay.fromDateTime(newDateTime);
+    
+    // Check if the time is in the past
+    final now = DateTime.now();
+    if (newDateTime.isBefore(now)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot reschedule to a past time'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Validate spa hours
+    if (!_validateSpaHours(selectedTime)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Selected time must be within spa operating hours: ' +
+            '${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}'
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check for conflicts
     bool hasConflict = await _hasAppointmentConflict(newDateTime, bookingId);
     if (hasConflict) return;
 
@@ -246,14 +343,42 @@ class _ManageBookingsState extends State<ManageBookings> {
 
   /// Show time picker
   Future<void> _selectTime(BuildContext context) async {
-    final TimeOfDay? picked = await showTimePicker(
+    final now = TimeOfDay.now();
+    final DateTime today = DateTime.now();
+    final isToday = selectedDate?.year == today.year && 
+                    selectedDate?.month == today.month && 
+                    selectedDate?.day == today.day;
+
+    TimeOfDay minimumTime = isToday 
+        ? now 
+        : spaOpeningTime ?? TimeOfDay(hour: 9, minute: 0);
+
+    TimeOfDay? pickedTime = await showTimePicker(
       context: context,
-      initialTime: selectedTime ?? TimeOfDay.now(),
+      initialTime: selectedTime ?? minimumTime,
     );
-    if (picked != null && picked != selectedTime) {
-      setState(() {
-        selectedTime = picked;
-      });
+
+    if (pickedTime != null) {
+      // Validate against minimum time for today
+      if (isToday && _timeToMinutes(pickedTime) < _timeToMinutes(minimumTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cannot select a time in the past'))
+        );
+        return;
+      }
+
+      // Validate against spa hours
+      if (!_validateSpaHours(pickedTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(
+            'Selected time must be within spa operating hours: ' +
+            '${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}'
+          ))
+        );
+        return;
+      }
+
+      setState(() => selectedTime = pickedTime);
     }
   }
 
@@ -262,6 +387,7 @@ class _ManageBookingsState extends State<ManageBookings> {
     setState(() {
       selectedDate = null;
       selectedTime = null;
+      selectedEndTime = null; // Add this line
     });
     
     showDialog(
@@ -279,14 +405,30 @@ class _ManageBookingsState extends State<ManageBookings> {
                       title: Text("Date: ${selectedDate != null ? DateFormat('yyyy-MM-dd').format(selectedDate!) : 'Not selected'}"),
                       trailing: const Icon(Icons.calendar_today),
                       onTap: () => _selectDate(context).then((_) {
-                        setState(() {}); // Update StatefulBuilder state
+                        setState(() {}); 
                       }),
                     ),
                     ListTile(
-                      title: Text("Time: ${selectedTime != null ? selectedTime!.format(context) : 'Not selected'}"),
+                      title: Text("Start Time: ${selectedTime != null ? selectedTime!.format(context) : 'Not selected'}"),
                       trailing: const Icon(Icons.access_time),
                       onTap: () => _selectTime(context).then((_) {
-                        setState(() {}); // Update StatefulBuilder state
+                        setState(() {
+                          // When start time changes, automatically set end time 1 hour later
+                          if (selectedTime != null) {
+                            selectedEndTime = TimeOfDay(
+                              hour: (selectedTime!.hour + 1) % 24,
+                              minute: selectedTime!.minute,
+                            );
+                          }
+                        });
+                      }),
+                    ),
+                    ListTile(
+                      title: Text("End Time: ${selectedEndTime != null ? selectedEndTime!.format(context) : 'Not selected'}"),
+                      trailing: const Icon(Icons.access_time),
+                      enabled: selectedTime != null,
+                      onTap: selectedTime == null ? null : () => _selectEndTime(context).then((_) {
+                        setState(() {});
                       }),
                     ),
                   ],
@@ -295,14 +437,12 @@ class _ManageBookingsState extends State<ManageBookings> {
               actions: <Widget>[
                 TextButton(
                   child: const Text("Cancel"),
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                  },
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
                 TextButton(
                   child: const Text("Confirm"),
                   onPressed: () {
-                    if (selectedDate != null && selectedTime != null) {
+                    if (selectedDate != null && selectedTime != null && selectedEndTime != null) {
                       final dateTime = DateTime(
                         selectedDate!.year,
                         selectedDate!.month,
@@ -318,9 +458,8 @@ class _ManageBookingsState extends State<ManageBookings> {
                       }
                       Navigator.of(context).pop();
                     } else {
-                      // Show error that date and time must be selected
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please select both date and time')),
+                        const SnackBar(content: Text('Please select date, start time, and end time')),
                       );
                     }
                   },
@@ -331,6 +470,39 @@ class _ManageBookingsState extends State<ManageBookings> {
         );
       },
     );
+  }
+
+  // Add method to select end time
+  Future<void> _selectEndTime(BuildContext context) async {
+    if (selectedTime == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select start time first')),
+      );
+      return;
+    }
+
+    final TimeOfDay? picked = await showTimePicker(
+      context: context,
+      initialTime: selectedEndTime ?? TimeOfDay(
+        hour: (selectedTime!.hour + 1) % 24,
+        minute: selectedTime!.minute,
+      ),
+    );
+
+    if (picked != null) {
+      // Validate end time is after start time
+      final startMinutes = selectedTime!.hour * 60 + selectedTime!.minute;
+      final endMinutes = picked.hour * 60 + picked.minute;
+
+      if (endMinutes <= startMinutes) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time')),
+        );
+        return;
+      }
+
+      setState(() => selectedEndTime = picked);
+    }
   }
 
   /// Get a date-time object from booking data
@@ -420,182 +592,6 @@ class _ManageBookingsState extends State<ManageBookings> {
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
   
-  @override
-  Widget build(BuildContext context) {
-    final filteredBookings = _getFilteredBookings();
-    
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Manage Bookings"),
-        actions: [
-          // Filter dropdown
-          DropdownButton<String>(
-            value: selectedFilter,
-            icon: const Padding(
-              padding: EdgeInsets.only(right: 16.0),
-              child: Icon(Icons.filter_list),
-            ),
-            onChanged: (String? newValue) {
-              setState(() {
-                selectedFilter = newValue;
-              });
-            },
-            items: <String>['Upcoming', 'Past', 'Cancelled']
-                .map<DropdownMenuItem<String>>((String value) {
-              return DropdownMenuItem<String>(
-                value: value,
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(value),
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : filteredBookings.isEmpty
-              ? Center(
-                  child: Text(
-                    "No ${selectedFilter?.toLowerCase()} appointments found.",
-                    style: const TextStyle(fontSize: 18, color: Colors.grey),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: filteredBookings.length,
-                  itemBuilder: (context, index) {
-                    final booking = filteredBookings[index];
-                    
-                    // Combine date and start time for display
-                    final bookingDate = booking['booking_date'] != null 
-                        ? DateTime.parse("${booking['booking_date']}") 
-                        : null;
-                    
-                    final startTime = booking['booking_start_time'];
-                    
-                    String formattedDate = "No date";
-                    bool isPastAppointment = false;
-                    
-                    if (bookingDate != null && startTime != null) {
-                      // Parse time string (assuming format like "14:30:00")
-                      final timeParts = startTime.toString().split(':');
-                      if (timeParts.length >= 2) {
-                        final hour = int.parse(timeParts[0]);
-                        final minute = int.parse(timeParts[1]);
-                        
-                        final fullDateTime = DateTime(
-                          bookingDate.year,
-                          bookingDate.month,
-                          bookingDate.day,
-                          hour,
-                          minute,
-                        );
-                        
-                        formattedDate = DateFormat('MMM dd, yyyy - hh:mm a').format(fullDateTime);
-                        isPastAppointment = fullDateTime.isBefore(DateTime.now());
-                      }
-                    }
-                    
-                    // Get client name
-                    final clientFirstName = booking['client']?['first_name'] ?? '';
-                    final clientLastName = booking['client']?['last_name'] ?? '';
-                    final clientName = "$clientFirstName $clientLastName".trim();
-                    
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    booking['service']?['service_name'] ?? "Unknown Service",
-                                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: _getStatusColor(booking['status']),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    booking['status'] ?? "Unknown",
-                                    style: TextStyle(
-                                      color: _getStatusTextColor(booking['status']),
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            Text("Date: $formattedDate"),
-                            if (widget.userRole == 'manager')
-                              Text("Client: ${clientName.isNotEmpty ? clientName : 'Unknown'}"),
-                            Text("Spa: ${booking['spa']?['spa_name'] ?? 'Unknown'}"),
-                            if (booking['service']?['service_price'] != null)
-                              Text("Price: \$${booking['service']['service_price']}"),
-                            const SizedBox(height: 12),
-                            
-                            // Only show action buttons for non-completed/cancelled status
-                            if (booking['status'] != 'Completed' && 
-                                booking['status'] != 'Cancelled') 
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.end,
-                                children: [
-                                  if (widget.userRole == 'manager') ...[
-                                    ElevatedButton(
-                                      onPressed: () => _markBookingComplete(booking['book_id']),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.blue,
-                                      ),
-                                      child: const Text("Mark Complete"),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  if (widget.userRole == 'manager' && booking['status'] == 'Rescheduled') ...[
-                                    ElevatedButton(
-                                      onPressed: () => _approveBooking(booking['book_id']),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.green,
-                                      ),
-                                      child: const Text("Approve"),
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                  ElevatedButton(
-                                    onPressed: () => _showRescheduleDialog(
-                                      context, 
-                                      bookingId: booking['book_id'],
-                                    ),
-                                    child: Text(widget.userRole == 'client' ? "Reschedule" : "Change Time"),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ElevatedButton(
-                                    onPressed: () => _cancelBooking(booking['book_id']),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red,
-                                    ),
-                                    child: const Text("Cancel"),
-                                  ),
-                                ],
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
-                ),
-    );
-  }
-  
   // Helper method to get background color for status
   Color _getStatusColor(String? status) {
     switch (status) {
@@ -626,5 +622,117 @@ class _ManageBookingsState extends State<ManageBookings> {
       default:
         return Colors.grey[800]!;
     }
+  }
+
+  // Add time validation helpers
+  int _timeToMinutes(TimeOfDay time) {
+    return time.hour * 60 + time.minute;
+  }
+
+  bool _validateSpaHours(TimeOfDay time) {
+    if (spaOpeningTime == null || spaClosingTime == null) return true;
+
+    int timeInMinutes = _timeToMinutes(time);
+    int openingInMinutes = _timeToMinutes(spaOpeningTime!);
+    int closingInMinutes = _timeToMinutes(spaClosingTime!);
+
+    if (closingInMinutes < openingInMinutes) {
+      closingInMinutes += 24 * 60;
+      if (timeInMinutes < openingInMinutes) {
+        timeInMinutes += 24 * 60;
+      }
+    }
+
+    return timeInMinutes >= openingInMinutes && timeInMinutes <= closingInMinutes;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Manage Bookings'),
+        actions: [
+          DropdownButton<String>(
+            value: selectedFilter,
+            items: ['All', 'Upcoming', 'Past', 'Cancelled'].map((String value) {
+              return DropdownMenuItem<String>(
+                value: value,
+                child: Text(value),
+              );
+            }).toList(),
+            onChanged: (String? newValue) {
+              if (newValue != null) {
+                setState(() {
+                  selectedFilter = newValue;
+                });
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _fetchBookings,
+          ),
+        ],
+      ),
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : bookings.isEmpty
+              ? const Center(child: Text('No bookings found'))
+              : ListView.builder(
+                  itemCount: _getFilteredBookings().length,
+                  padding: const EdgeInsets.all(8.0),
+                  itemBuilder: (context, index) {
+                    final booking = _getFilteredBookings()[index];
+                    final bookingDateTime = _getBookingDateTime(booking);
+                    if (bookingDateTime == null) return Container();
+
+                    return Card(
+                      margin: const EdgeInsets.symmetric(vertical: 4.0),
+                      color: _getStatusColor(booking['status']),
+                      child: ListTile(
+                        title: Text('Service: ${booking['service']['service_name']}'),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Date: ${DateFormat('MMM dd, yyyy').format(bookingDateTime)}'),
+                            Text('Time: ${DateFormat('hh:mm a').format(bookingDateTime)}'),
+                            Text('Status: ${booking['status']}',
+                                style: TextStyle(color: _getStatusTextColor(booking['status']))),
+                          ],
+                        ),
+                        trailing: booking['status'] == 'Scheduled' ||
+                                booking['status'] == 'Rescheduled'
+                            ? PopupMenuButton(
+                                itemBuilder: (context) => [
+                                  if (widget.userRole == 'client')
+                                    PopupMenuItem(
+                                      child: const Text('Reschedule'),
+                                      onTap: () => _showRescheduleDialog(
+                                          context, bookingId: booking['book_id']),
+                                    ),
+                                  if (widget.userRole == 'manager')
+                                    PopupMenuItem(
+                                      child: const Text('Change Time'),
+                                      onTap: () => _showRescheduleDialog(
+                                          context, bookingId: booking['book_id']),
+                                    ),
+                                  PopupMenuItem(
+                                    child: const Text('Cancel'),
+                                    onTap: () => _cancelBooking(booking['book_id']),
+                                  ),
+                                  if (widget.userRole == 'manager')
+                                    PopupMenuItem(
+                                      child: const Text('Mark Complete'),
+                                      onTap: () =>
+                                          _markBookingComplete(booking['book_id']),
+                                    ),
+                                ],
+                              )
+                            : null,
+                      ),
+                    );
+                  },
+                ),
+    );
   }
 }

@@ -68,7 +68,7 @@ class _ReceptionistDashboardState extends State<ReceptionistDashboard> {
       context,
       MaterialPageRoute(
         builder: (context) => ReceptionistBookings(
-          receptionistId: widget.receptionistData['receptionist_id'],
+          receptionistId: widget.receptionistData['staff_id'], // Changed from receptionist_id
           spaId: widget.receptionistData['spa_id'],
         )
       )

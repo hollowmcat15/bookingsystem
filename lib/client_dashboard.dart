@@ -6,6 +6,7 @@ import 'profile_page.dart';
 import 'login.dart';
 import 'package:flutter/services.dart';
 import 'dart:math' as math;
+import 'bookmarked_services.dart';
 
 class ClientDashboard extends StatefulWidget {
   @override
@@ -268,6 +269,29 @@ Future<void> _logout() async {
     }
   },
 ),
+            ListTile(
+              leading: Icon(Icons.bookmark),
+              title: Text("View Bookmarks"),
+              onTap: () async {
+                final userEmail = Supabase.instance.client.auth.currentUser?.email;
+                if (userEmail != null) {
+                  final client = await Supabase.instance.client
+                      .from('client')
+                      .select('client_id')
+                      .eq('email', userEmail)
+                      .maybeSingle();
+
+                  if (client != null && mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => BookmarkedServices(clientId: client['client_id']),
+                      ),
+                    );
+                  }
+                }
+              },
+            ),
             ListTile(
               leading: Icon(Icons.exit_to_app),
               title: Text("Logout"),

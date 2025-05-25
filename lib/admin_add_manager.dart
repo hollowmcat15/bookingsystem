@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'widgets/otp_verification_dialog.dart';
 
 class AdminAddManager extends StatefulWidget {
   @override
@@ -9,122 +10,119 @@ class AdminAddManager extends StatefulWidget {
 
 class _AdminAddManagerState extends State<AdminAddManager> {
   final _formKey = GlobalKey<FormState>();
-  final _managerFormKey = GlobalKey<FormState>();
-  final _spaFormKey = GlobalKey<FormState>();
   final supabase = Supabase.instance.client;
 
-  // Manager Details Controllers
   final _emailController = TextEditingController();
   final _firstNameController = TextEditingController();
   final _lastNameController = TextEditingController();
   final _phoneController = TextEditingController();
   final _birthdayController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isPasswordVisible = false;
 
-  // Spa Details Controllers
-  final _spaNameController = TextEditingController();
-  final _spaAddressController = TextEditingController();
-  final _spaPostalCodeController = TextEditingController();
-  final _spaPhoneController = TextEditingController();
-  final _spaDescriptionController = TextEditingController();
-  
   bool _isLoading = false;
   DateTime? _selectedDate;
 
-  // Emoji detection regex
-  final RegExp emojiRegex = RegExp(
-    r'[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F000}-\u{1F02F}]|[\u{1F0A0}-\u{1F0FF}]|[\u{1F100}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F910}-\u{1F96B}]',
-    unicode: true
-  );
-
-  String? _validateNoEmoji(String? value, String fieldName) {
-    if (value == null || value.isEmpty) {
-      return '$fieldName is required';
-    }
-    if (emojiRegex.hasMatch(value)) {
-      return 'Emojis are not allowed in $fieldName';
-    }
-    return null;
-  }
-
   String? _validatePhone(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Phone number is required';
-    }
-    if (value.length != 11) {
-      return 'Phone number must be 11 digits';
-    }
+    if (value == null || value.isEmpty) return 'Required';
+    if (value.length != 11) return 'Phone number must be 11 digits';
     if (!RegExp(r'^\d{11}$').hasMatch(value)) {
       return 'Enter a valid 11 digit phone number';
     }
     return null;
   }
 
-  Future<void> _addManagerAndSpa() async {
-    if (!_managerFormKey.currentState!.validate() || 
-        !_spaFormKey.currentState!.validate()) {
-      return;
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
     }
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters';
+    }
+    if (!RegExp(r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$')
+        .hasMatch(value)) {
+      return 'Password must contain uppercase, lowercase,\nnumber and special character';
+    }
+    return null;
+  }
+
+  String? _validateName(String? value, String fieldName) {
+    if (value == null || value.isEmpty) {
+      return '$fieldName is required';
+    }
+    // Only allow letters, spaces, and hyphens
+    if (!RegExp(r"^[a-zA-Z\s-]+$").hasMatch(value)) {
+      return '$fieldName can only contain letters, spaces, and hyphens';
+    }
+    return null;
+  }
+
+  Future<void> _addManager() async {
+    if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // 1. Create auth user
+      // First create auth user, which will trigger email verification
       final authResponse = await supabase.auth.signUp(
         email: _emailController.text,
-        password: 'temppass123', // Temporary password
+        password: _passwordController.text,
+        emailRedirectTo: 'io.supabase.flutterquickstart://login-callback/',
         data: {'role': 'manager'},
       );
 
       if (authResponse.user == null) throw Exception('Failed to create user');
 
-      // 2. Add to staff table
-      final staffResponse = await supabase.from('staff').insert({
-        'auth_id': authResponse.user!.id,
-        'first_name': _firstNameController.text,
-        'last_name': _lastNameController.text,
-        'email': _emailController.text,
-        'phonenumber': _phoneController.text,
-        'birthday': _selectedDate?.toIso8601String(),
-        'role': 'Manager',
-        'status': 'Active',
-      }).select();
+      // Show OTP verification dialog
+      final verified = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => OTPVerificationDialog(
+          email: _emailController.text,
+          title: 'Verify Manager Email',
+          message: 'Please enter the verification code sent to ${_emailController.text}',
+          type: OtpType.signup,
+        ),
+      );
 
-      if (staffResponse.isEmpty) throw Exception('Failed to create staff record');
+      if (verified == true) {
+        // Add to staff table
+        await supabase.from('staff').insert({
+          'auth_id': authResponse.user!.id,
+          'first_name': _firstNameController.text,
+          'last_name': _lastNameController.text,
+          'email': _emailController.text,
+          'phonenumber': _phoneController.text,
+          'birthday': _selectedDate?.toIso8601String(),
+          'role': 'Manager',
+          'status': 'Active',
+        });
 
-      // 3. Create spa
-      await supabase.from('spa').insert({
-        'manager_id': staffResponse[0]['staff_id'],
-        'spa_name': _spaNameController.text,
-        'spa_address': _spaAddressController.text,
-        'postal_code': _spaPostalCodeController.text,
-        'spa_phonenumber': _spaPhoneController.text,
-        'description': _spaDescriptionController.text,
-        'created_at': DateTime.now().toIso8601String(),
-      });
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Manager and Spa added successfully')),
-        );
-        Navigator.pop(context, true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Manager added successfully')),
+          );
+          Navigator.pop(context, true);
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
-    } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: ${e.toString()}')),
+        );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   Future<void> _selectDate(BuildContext context) async {
+    final currentYear = DateTime.now().year;
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime.now(),
+      initialDate: _selectedDate ?? DateTime(currentYear - 25),
       firstDate: DateTime(1950),
-      lastDate: DateTime.now(),
+      lastDate: DateTime(currentYear - 1), // Prevent selecting current year
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
@@ -137,9 +135,7 @@ class _AdminAddManagerState extends State<AdminAddManager> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Add New Manager with Spa'),
-      ),
+      appBar: AppBar(title: Text('Add New Manager')),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -147,105 +143,63 @@ class _AdminAddManagerState extends State<AdminAddManager> {
               child: Form(
                 key: _formKey,
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Manager Details Section
-                    Text('Manager Details', 
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 16),
-                    Form(
-                      key: _managerFormKey,
-                      child: Column(
-                        children: [
-                          TextFormField(
-                            controller: _emailController,
-                            decoration: InputDecoration(labelText: 'Email'),
-                            validator: (value) => _validateNoEmoji(value, 'Email'),
-                          ),
-                          TextFormField(
-                            controller: _firstNameController,
-                            decoration: InputDecoration(labelText: 'First Name'),
-                            validator: (value) => _validateNoEmoji(value, 'First name'),
-                          ),
-                          TextFormField(
-                            controller: _lastNameController,
-                            decoration: InputDecoration(labelText: 'Last Name'),
-                            validator: (value) => _validateNoEmoji(value, 'Last name'),
-                          ),
-                          TextFormField(
-                            controller: _phoneController,
-                            decoration: InputDecoration(labelText: 'Phone Number'),
-                            validator: _validatePhone,
-                            keyboardType: TextInputType.phone,
-                            maxLength: 11,
-                          ),
-                          TextFormField(
-                            controller: _birthdayController,
-                            decoration: InputDecoration(
-                              labelText: 'Birthday',
-                              suffixIcon: Icon(Icons.calendar_today),
-                            ),
-                            readOnly: true,
-                            onTap: () => _selectDate(context),
-                            validator: (value) => value?.isEmpty ?? true 
-                                ? 'Birthday is required' 
-                                : null,
-                          ),
-                        ],
-                      ),
+                    TextFormField(
+                      controller: _emailController,
+                      decoration: InputDecoration(labelText: 'Email'),
+                      validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
                     ),
-
-                    SizedBox(height: 32),
-
-                    // Spa Details Section
-                    Text('Spa Details', 
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                    SizedBox(height: 16),
-                    Form(
-                      key: _spaFormKey,
-                      child: Column(
-                        children: [
-                          TextFormField(
-                            controller: _spaNameController,
-                            decoration: InputDecoration(labelText: 'Spa Name'),
-                            validator: (value) => _validateNoEmoji(value, 'Spa name'),
-                          ),
-                          TextFormField(
-                            controller: _spaAddressController,
-                            decoration: InputDecoration(labelText: 'Spa Address'),
-                            validator: (value) => _validateNoEmoji(value, 'Address'),
-                          ),
-                          TextFormField(
-                            controller: _spaPostalCodeController,
-                            decoration: InputDecoration(labelText: 'Postal Code'),
-                            validator: (value) => _validateNoEmoji(value, 'Postal code'),
-                          ),
-                          TextFormField(
-                            controller: _spaPhoneController,
-                            decoration: InputDecoration(labelText: 'Spa Phone Number'),
-                            validator: _validatePhone,
-                            keyboardType: TextInputType.phone,
-                            maxLength: 11,
-                          ),
-                          TextFormField(
-                            controller: _spaDescriptionController,
-                            decoration: InputDecoration(labelText: 'Description'),
-                            validator: (value) => _validateNoEmoji(value, 'Description'),
-                            maxLines: 3,
-                          ),
-                        ],
-                      ),
+                    TextFormField(
+                      controller: _firstNameController,
+                      decoration: InputDecoration(labelText: 'First Name'),
+                      validator: (value) => _validateName(value, 'First Name'),
                     ),
-
-                    SizedBox(height: 32),
-
-                    Center(
-                      child: ElevatedButton(
-                        onPressed: _addManagerAndSpa,
-                        child: Text('Create Manager and Spa'),
-                        style: ElevatedButton.styleFrom(
-                          padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                    TextFormField(
+                      controller: _lastNameController,
+                      decoration: InputDecoration(labelText: 'Last Name'),
+                      validator: (value) => _validateName(value, 'Last Name'),
+                    ),
+                    TextFormField(
+                      controller: _phoneController,
+                      decoration: InputDecoration(labelText: 'Phone Number'),
+                      validator: _validatePhone,
+                      keyboardType: TextInputType.phone,
+                      maxLength: 11,
+                    ),
+                    TextFormField(
+                      controller: _birthdayController,
+                      decoration: InputDecoration(
+                        labelText: 'Birthday',
+                        suffixIcon: Icon(Icons.calendar_today),
+                      ),
+                      readOnly: true,
+                      onTap: () => _selectDate(context),
+                      validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
+                    ),
+                    TextFormField(
+                      controller: _passwordController,
+                      obscureText: !_isPasswordVisible,
+                      decoration: InputDecoration(
+                        labelText: 'Password',
+                        prefixIcon: Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                            color: Colors.grey,
+                          ),
+                          onPressed: () => setState(() => 
+                            _isPasswordVisible = !_isPasswordVisible
+                          ),
                         ),
+                      ),
+                      validator: _validatePassword,
+                    ),
+                    SizedBox(height: 24),
+                    ElevatedButton(
+                      onPressed: _addManager,
+                      child: Text('Add Manager'),
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                       ),
                     ),
                   ],
@@ -262,11 +216,7 @@ class _AdminAddManagerState extends State<AdminAddManager> {
     _lastNameController.dispose();
     _phoneController.dispose();
     _birthdayController.dispose();
-    _spaNameController.dispose();
-    _spaAddressController.dispose();
-    _spaPostalCodeController.dispose();
-    _spaPhoneController.dispose();
-    _spaDescriptionController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 }

@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:crypto/crypto.dart';
+import 'dart:convert';
+import 'widgets/otp_verification_dialog.dart'; // Update the import path to include widgets folder
 
 class ChangePasswordPage extends StatefulWidget {
   final bool isForgotPassword;
+  final String? email;  // Add email parameter
 
   const ChangePasswordPage({
-    Key? key,
+    Key? key, 
     this.isForgotPassword = false,
+    this.email,
   }) : super(key: key);
 
   @override
@@ -16,141 +21,112 @@ class ChangePasswordPage extends StatefulWidget {
 class _ChangePasswordPageState extends State<ChangePasswordPage> {
   final SupabaseClient supabase = Supabase.instance.client;
   final _formKey = GlobalKey<FormState>();
-
-  TextEditingController _emailController = TextEditingController();
-  TextEditingController _otpController = TextEditingController();
-  TextEditingController _newPasswordController = TextEditingController();
-  TextEditingController _confirmPasswordController = TextEditingController();
-  TextEditingController _oldPasswordController = TextEditingController();
-
+  
+  final _emailController = TextEditingController();
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  
   bool _isLoading = false;
-  bool _otpSent = false;
-  String? _userRole;
+  bool _obscureOld = true;
+  bool _obscureNew = true;
 
   @override
   void initState() {
     super.initState();
-    if (!widget.isForgotPassword) {
-      _fetchUserRole();
+    // Only set email if provided through widget
+    if (widget.email != null) {
+      _emailController.text = widget.email!;
     }
   }
 
-  /// ✅ Detect user role
-  Future<void> _fetchUserRole() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    List<String> roles = ["client", "manager", "therapist", "receptionist"];
-    for (String role in roles) {
-      final response = await supabase.from(role).select('email').eq('email', user.email!).maybeSingle();
-      if (response != null) {
-        setState(() {
-          _userRole = role;
-        });
-        return;
-      }
-    }
+  // Encrypt password using SHA-256
+  String _encryptPassword(String password) {
+    final bytes = utf8.encode(password);
+    final hash = sha256.convert(bytes);
+    return hash.toString();
   }
 
-  Future<void> _sendOTP() async {
-    if (_emailController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please enter your email')),
-      );
-      return;
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
     }
-
-    setState(() => _isLoading = true);
-
-    try {
-      await supabase.auth.resetPasswordForEmail(
-        _emailController.text,
-        redirectTo: 'io.supabase.flutterquickstart://reset-callback/',
-      );
-
-      setState(() => _otpSent = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('OTP sent to your email')),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error sending OTP: ${e.toString()}')),
-      );
-    } finally {
-      setState(() => _isLoading = false);
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters';
     }
+    if (!RegExp(r'^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$')
+        .hasMatch(value)) {
+      return 'Password must contain uppercase, lowercase,\nnumber and special character';
+    }
+    return null;
   }
 
-  /// ✅ Update Password in Supabase Auth
-  Future<void> _updatePassword() async {
-    if (!_formKey.currentState!.validate() || _userRole == null) return;
-
-    if (_newPasswordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("New passwords do not match!")),
-      );
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-    });
-
-    try {
-      await supabase.auth.updateUser(
-        UserAttributes(password: _newPasswordController.text),
-      );
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Password updated successfully!")),
-      );
-
-      Navigator.pop(context);
-    } on AuthException catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Failed to update password: ${e.message}")),
-      );
-    }
-
-    setState(() {
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _verifyOTPAndUpdatePassword() async {
+  Future<void> _changePassword() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_newPasswordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Passwords do not match')),
-      );
-      return;
-    }
-
     setState(() => _isLoading = true);
 
     try {
-      // Verify OTP and update password
-      await supabase.auth.verifyOTP(
+      // First verify current password if not in forgot password mode
+      if (!widget.isForgotPassword) {
+        final response = await supabase.auth.signInWithPassword(
+          email: _emailController.text,
+          password: _oldPasswordController.text,
+        );
+
+        if (response.user == null) {
+          throw Exception('Current password is incorrect');
+        }
+      }
+
+      // Request OTP
+      await supabase.auth.signInWithOtp(
         email: _emailController.text,
-        token: _otpController.text,
-        type: OtpType.recovery,
-      );
-
-      await supabase.auth.updateUser(
-        UserAttributes(password: _newPasswordController.text),
+        shouldCreateUser: false, // Important: must be false for password reset
       );
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Password updated successfully')),
+        SnackBar(content: Text("Verification code sent to ${_emailController.text}")),
       );
-      Navigator.pop(context);
+
+      // Show OTP verification dialog
+      final verified = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => OTPVerificationDialog(
+          email: _emailController.text,
+          title: 'Verify Password Change',
+          message: 'Please enter the verification code sent to ${_emailController.text}',
+          type: OtpType.email,
+        ),
+      );
+
+      if (verified == true) {
+        // Update password after OTP verification
+        await supabase.auth.updateUser(
+          UserAttributes(password: _newPasswordController.text),
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Password changed successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context); // Go back after successful change
+        }
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -158,119 +134,111 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isForgotPassword ? 'Reset Password' : 'Change Password'),
+        title: Text('Reset Password'),
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (widget.isForgotPassword) ...[
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: InputDecoration(
-                      labelText: 'Email',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.email),
-                    ),
-                    validator: (value) => value!.isEmpty ? 'Enter your email' : null,
-                    enabled: !_otpSent,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextFormField(  // Changed from TextField back to TextFormField
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: Colors.black,
+                  fontWeight: FontWeight.w500,
+                ),
+                decoration: InputDecoration(
+                  labelText: 'Email',
+                  labelStyle: TextStyle(color: Colors.black54),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  SizedBox(height: 16),
-                  if (!_otpSent)
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _sendOTP,
-                      child: _isLoading
-                          ? CircularProgressIndicator()
-                          : Text('Send OTP'),
-                    ),
-                  if (_otpSent) ...[
-                    TextFormField(
-                      controller: _otpController,
-                      decoration: InputDecoration(
-                        labelText: 'Enter OTP',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.lock_clock),
-                      ),
-                      validator: (value) => value!.isEmpty ? 'Enter OTP' : null,
-                    ),
-                    SizedBox(height: 16),
-                    TextFormField(
-                      controller: _newPasswordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'New Password',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.lock_outline),
-                      ),
-                      validator: (value) => value!.length < 6
-                          ? 'Password must be at least 6 characters'
-                          : null,
-                    ),
-                    SizedBox(height: 16),
-                    TextFormField(
-                      controller: _confirmPasswordController,
-                      obscureText: true,
-                      decoration: InputDecoration(
-                        labelText: 'Confirm Password',
-                        border: OutlineInputBorder(),
-                        prefixIcon: Icon(Icons.lock),
-                      ),
-                      validator: (value) => value != _newPasswordController.text
-                          ? 'Passwords do not match'
-                          : null,
-                    ),
-                    SizedBox(height: 16),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _verifyOTPAndUpdatePassword,
-                      child: _isLoading
-                          ? CircularProgressIndicator()
-                          : Text('Reset Password'),
-                    ),
-                  ],
-                ] else ...[
-                  TextFormField(
-                    controller: _oldPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: "Old Password",
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.lock),
-                    ),
-                    validator: (value) => value!.isEmpty ? "Enter your old password" : null,
+                  filled: true,
+                  fillColor: Colors.grey[50],
+                  prefixIcon: Icon(Icons.email, color: Colors.grey[600]),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email';
+                  }
+                  if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                    return 'Please enter a valid email';
+                  }
+                  return null;
+                },
+              ),
+              SizedBox(height: 16),
+              
+              TextFormField(
+                controller: _oldPasswordController,
+                obscureText: _obscureOld,
+                style: TextStyle(color: Colors.black87), // Add text color
+                decoration: InputDecoration(
+                  labelText: 'Current Password',
+                  labelStyle: TextStyle(color: Colors.black87), // Add label color
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                  SizedBox(height: 16),
-                  TextFormField(
-                    controller: _newPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: "New Password",
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.lock_outline),
+                  prefixIcon: Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureOld ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.grey,
                     ),
-                    validator: (value) => value!.length < 6 ? "Password must be at least 6 characters" : null,
+                    onPressed: () => setState(() => _obscureOld = !_obscureOld),
                   ),
-                  SizedBox(height: 16),
-                  TextFormField(
-                    controller: _confirmPasswordController,
-                    obscureText: true,
-                    decoration: InputDecoration(
-                      labelText: "Confirm New Password",
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.check),
+                ),
+                validator: _validatePassword,
+              ),
+              SizedBox(height: 16),
+              
+              TextFormField(
+                controller: _newPasswordController,
+                obscureText: _obscureNew,
+                style: TextStyle(color: Colors.black87), // Add text color
+                decoration: InputDecoration(
+                  labelText: 'New Password',
+                  labelStyle: TextStyle(color: Colors.black87), // Add label color
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  prefixIcon: Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _obscureNew ? Icons.visibility_off : Icons.visibility,
+                      color: Colors.grey,
                     ),
+                    onPressed: () => setState(() => _obscureNew = !_obscureNew),
                   ),
-                  SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _updatePassword,
-                    child: _isLoading ? CircularProgressIndicator() : Text("Update Password"),
+                ),
+                validator: _validatePassword,
+              ),
+              SizedBox(height: 24),
+              
+              ElevatedButton(
+                onPressed: _isLoading ? null : _changePassword,
+                style: ElevatedButton.styleFrom(
+                  padding: EdgeInsets.symmetric(vertical: 15),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                ],
-              ],
-            ),
+                ),
+                child: _isLoading
+                    ? SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : Text('Change Password'),
+              ),
+            ],
           ),
         ),
       ),
@@ -280,10 +248,8 @@ class _ChangePasswordPageState extends State<ChangePasswordPage> {
   @override
   void dispose() {
     _emailController.dispose();
-    _otpController.dispose();
-    _newPasswordController.dispose();
-    _confirmPasswordController.dispose();
     _oldPasswordController.dispose();
+    _newPasswordController.dispose();
     super.dispose();
   }
 }

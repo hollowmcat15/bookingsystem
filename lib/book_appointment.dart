@@ -85,16 +85,18 @@ class _BookAppointmentState extends State<BookAppointment> {
   Future<void> _fetchTherapists() async {
     try {
       final response = await supabase
-          .from('therapist')
-          .select('therapist_id, first_name, last_name')
+          .from('staff')
+          .select('staff_id, first_name, last_name')
           .eq('spa_id', widget.spaId)
-          // Optionally filter by status if needed: .eq('status', 'Active')
-          .order('first_name', ascending: true) // Optional: Order therapists
+          .eq('role', 'Therapist')
+          .eq('is_active', true)
+          .order('first_name', ascending: true)
           .order('last_name', ascending: true);
 
       if (mounted) {
         setState(() {
           therapists = response;
+          // Update references to therapist_id to use staff_id instead
         });
       }
     } catch (e) {
@@ -144,7 +146,7 @@ class _BookAppointmentState extends State<BookAppointment> {
     DateTime? pickedDate = await showDatePicker(
       context: context,
       initialDate: selectedDate ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(Duration(days: 1)), // Allow today
+      firstDate: DateTime.now(), // Prevents selecting past dates
       lastDate: DateTime.now().add(Duration(days: 90)),
       builder: (context, child) {
         return Theme(
@@ -165,13 +167,44 @@ class _BookAppointmentState extends State<BookAppointment> {
     if (pickedDate != null && pickedDate != selectedDate) {
       setState(() {
         selectedDate = pickedDate;
+        // Reset time selections when date changes
+        if (selectedDate!.year == DateTime.now().year &&
+            selectedDate!.month == DateTime.now().month &&
+            selectedDate!.day == DateTime.now().day) {
+          // If today is selected, reset times to ensure only future times can be selected
+          selectedStartTime = null;
+          selectedEndTime = null;
+        }
       });
-      // Remove the _findNextAvailableSlot call
     }
   }
 
   void _selectStartTime() async {
-    TimeOfDay initialTime = selectedStartTime ?? (spaOpeningTime ?? TimeOfDay(hour: 9, minute: 0));
+    // Set minimum time based on whether the selected date is today
+    TimeOfDay minimumTime;
+    final now = TimeOfDay.now();
+    
+    if (selectedDate?.year == DateTime.now().year &&
+        selectedDate?.month == DateTime.now().month &&
+        selectedDate?.day == DateTime.now().day) {
+      // If today is selected, minimum time is current time
+      minimumTime = now;
+    } else {
+      // For future dates, minimum time is opening time
+      minimumTime = spaOpeningTime ?? TimeOfDay(hour: 9, minute: 0);
+    }
+
+    TimeOfDay initialTime = selectedStartTime ?? minimumTime;
+    
+    // Ensure initial time is not before minimum time if today is selected
+    if (selectedDate?.year == DateTime.now().year &&
+        selectedDate?.month == DateTime.now().month &&
+        selectedDate?.day == DateTime.now().day) {
+      if (_timeToMinutes(initialTime) < _timeToMinutes(minimumTime)) {
+        initialTime = minimumTime;
+      }
+    }
+
     TimeOfDay? pickedTime = await showTimePicker(
       context: context,
       initialTime: initialTime,
@@ -193,7 +226,21 @@ class _BookAppointmentState extends State<BookAppointment> {
     );
 
     if (pickedTime != null) {
-      // Validate against spa hours
+      // Additional validation for today's bookings
+      if (selectedDate?.year == DateTime.now().year &&
+          selectedDate?.month == DateTime.now().month &&
+          selectedDate?.day == DateTime.now().day &&
+          _timeToMinutes(pickedTime) < _timeToMinutes(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Cannot select a time in the past."),
+            backgroundColor: Colors.red,
+          ),
+        );
+        return;
+      }
+
+      // Existing spa hours validation
       if (!_validateSpaHours(pickedTime)) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -209,19 +256,8 @@ class _BookAppointmentState extends State<BookAppointment> {
 
       setState(() {
         selectedStartTime = pickedTime;
-        // Reset end time if start time changes or if end time is now invalid
-        if (selectedEndTime != null) {
-          final startMinutes = selectedStartTime!.hour * 60 + selectedStartTime!.minute;
-          final endMinutes = selectedEndTime!.hour * 60 + selectedEndTime!.minute;
-          if (endMinutes <= startMinutes) {
-             selectedEndTime = null; // Force re-selection
-          }
-        }
-         // Suggest end time only if start time is set and end time isn't
-         if (selectedStartTime != null && selectedEndTime == null) {
-             final suggestedEndHour = (selectedStartTime!.hour + 1) % 24; // Add 1 hour, handle midnight wrap
-             selectedEndTime = TimeOfDay(hour: suggestedEndHour, minute: selectedStartTime!.minute);
-         }
+        // Reset end time if start time changes
+        selectedEndTime = null;
       });
     }
   }
@@ -306,8 +342,8 @@ class _BookAppointmentState extends State<BookAppointment> {
     if (!_validateBooking()) return;
 
     // 2. Show booking summary and get confirmation
-    bool proceed = await _showBookingSummary();
-    if (!proceed) return;
+    bool? proceed = await _showBookingSummary();
+    if (proceed != true) return;
 
     // 3. Check for conflicts
     bool hasConflict = await _hasAppointmentConflict();
@@ -335,15 +371,17 @@ class _BookAppointmentState extends State<BookAppointment> {
 
       // Check if the logged-in user is a Receptionist by matching their auth_id
       final receptionistResponse = await supabase
-          .from('receptionist')
-          .select('receptionist_id')
-          .eq('auth_id', user.id) // Compare Supabase Auth user ID with receptionist.auth_id
-          .maybeSingle(); // Use maybeSingle as the user might not be a receptionist
+          .from('staff') // Changed from 'receptionist' to 'staff'
+          .select('staff_id')  // Changed from 'receptionist_id' to 'staff_id'
+          .eq('auth_id', user.id)
+          .eq('role', 'Receptionist') // Add role filter
+          .eq('is_active', true)      // Ensure staff is active
+          .maybeSingle();
 
-      if (receptionistResponse != null && receptionistResponse['receptionist_id'] != null) {
+      if (receptionistResponse != null && receptionistResponse['staff_id'] != null) {
         // --- Scenario: Logged-in user IS a Receptionist ---
         print("User identified as Receptionist.");
-        bookingReceptionistId = receptionistResponse['receptionist_id'];
+        bookingReceptionistId = receptionistResponse['staff_id']; // Changed from 'receptionist_id'
 
         // For a receptionist booking, the client ID MUST be provided via the widget argument
         if (widget.clientIdForBooking == null) {
@@ -469,18 +507,47 @@ class _BookAppointmentState extends State<BookAppointment> {
     }
   }
 
-  // Replace the old _bookAppointment method with this updated version
-  void _processBooking() {
-    // Perform validations
-    if (!_validateBooking()) return;
-
-    // Show booking summary and get confirmation
-    _showBookingSummary().then((proceed) {
-      if (proceed) {
-        setState(() => isLoading = true);
-        _bookAppointment();  // Remove await since _bookAppointment is void
+  // Keep only this async version
+  Future<void> _processBooking() async {
+    try {
+      // 1. First validate all inputs
+      if (!_validateBooking()) {
+        return;
       }
-    });
+
+      // 2. Check for conflicts before showing summary
+      bool hasConflict = await _hasAppointmentConflict();
+      if (hasConflict) {
+        return;
+      }
+
+      // 3. Show booking summary and wait for confirmation
+      bool? confirmed = await _showBookingSummary();
+      if (confirmed != true) {
+        return;
+      }
+
+      // 4. Set loading state
+      setState(() => isLoading = true);
+
+      // 5. Process the actual booking
+      _bookAppointment();
+
+    } catch (e) {
+      print("Booking Process Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error processing booking: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
+    }
   }
 
   // --- Appointment Conflict Management ---
@@ -513,9 +580,9 @@ class _BookAppointmentState extends State<BookAppointment> {
         // Get conflicting appointment details
         final conflictingApp = response[0];
         final therapistData = selectedTherapistId != null ? await supabase
-            .from('therapist')
+            .from('staff')
             .select('first_name, last_name')
-            .eq('therapist_id', conflictingApp['therapist_id'])
+            .eq('staff_id', conflictingApp['therapist_id'])
             .single() : null;
 
         String conflictMessage = "Time slot conflict: ";
@@ -545,52 +612,76 @@ class _BookAppointmentState extends State<BookAppointment> {
     }
   }
 
-  /// Show booking summary dialog
-  Future<bool> _showBookingSummary() async {
-    final service = services.firstWhere(
-      (s) => s['service_id'] == selectedServiceId,
-      orElse: () => null,
-    );
-    final therapist = therapists.firstWhere(
-      (t) => t['therapist_id'] == selectedTherapistId,
-      orElse: () => null,
-    );
+  // Update _showBookingSummary to return bool?
+  Future<bool?> _showBookingSummary() async {
+    try {
+      // Fixed service lookup with proper type handling
+      if (!services.any((s) => s['service_id'] == selectedServiceId)) {
+        throw Exception('Selected service not found');
+      }
+      
+      final service = services.firstWhere(
+        (s) => s['service_id'] == selectedServiceId
+      );
 
-    return await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Booking Summary"),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _summaryItem("Date", DateFormat('MMM dd, yyyy').format(selectedDate!)),
-              _summaryItem("Time", "${selectedStartTime!.format(context)} - ${selectedEndTime!.format(context)}"),
-              _summaryItem("Service", "${service?['service_name'] ?? 'N/A'}"),
-              _summaryItem("Price", "₱${service?['service_price'] ?? 0}"),
-              if (therapist != null)
-                _summaryItem("Therapist", "${therapist['first_name']} ${therapist['last_name']}"),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text("Book Now"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: primaryPurple,
+      // Fixed therapist lookup with proper type casting
+      Map<String, dynamic>? therapist;
+      if (selectedTherapistId != null) {
+        final foundTherapist = therapists.cast<Map<String, dynamic>>().firstWhere(
+          (t) => t['staff_id'] == selectedTherapistId,
+          orElse: () => <String, dynamic>{},
+        );
+        therapist = foundTherapist.isNotEmpty ? foundTherapist : null;
+      }
+
+      return await showDialog<bool>(
+        context: context,
+        barrierDismissible: false, // Prevent closing by tapping outside
+        builder: (context) => AlertDialog(
+          title: Text("Booking Summary"),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _summaryItem("Date", DateFormat('MMM dd, yyyy').format(selectedDate!)),
+                _summaryItem("Time", "${selectedStartTime!.format(context)} - ${selectedEndTime!.format(context)}"),
+                _summaryItem("Service", service['service_name']),
+                _summaryItem("Price", "₱${service['service_price'].toStringAsFixed(2)}"),
+                if (therapist != null)
+                  _summaryItem("Therapist", "${therapist['first_name']} ${therapist['last_name']}"),
+              ],
             ),
           ),
-        ],
-      ),
-    ) ?? false;
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: Text("Confirm Booking"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryPurple,
+                foregroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      print("Summary Error: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error showing booking summary: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return false;
+    }
   }
 
+  // Add this helper method for summary items
   Widget _summaryItem(String label, String value) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4.0),
@@ -607,7 +698,7 @@ class _BookAppointmentState extends State<BookAppointment> {
     );
   }
 
-  // Helper for section titles
+  // Add helper for section titles
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10.0),
@@ -616,19 +707,19 @@ class _BookAppointmentState extends State<BookAppointment> {
         style: TextStyle(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: darkPurple, // Using the darker purple shade
+          color: darkPurple,
         ),
       ),
     );
   }
 
-  // Helper for Date Selector UI
+  // Add helper for date selector
   Widget _buildDateSelector(DateFormat formatter) {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade400),
-         color: Colors.grey[50], // Light background
+        color: Colors.grey[50],
       ),
       child: Material(
         color: Colors.transparent,
@@ -643,7 +734,7 @@ class _BookAppointmentState extends State<BookAppointment> {
                 Text(
                   selectedDate == null
                     ? "Choose a date"
-                    : formatter.format(selectedDate!), // Use formatter
+                    : formatter.format(selectedDate!),
                   style: TextStyle(
                     fontSize: 16,
                     color: selectedDate == null ? Colors.grey.shade600 : Colors.black87
@@ -658,7 +749,7 @@ class _BookAppointmentState extends State<BookAppointment> {
     );
   }
 
- // Helper for Time Slot Selector UI (Row of two time pickers)
+  // Add helper for time slot selector
   Widget _buildTimeSlotSelector() {
     return Row(
       children: [
@@ -675,60 +766,59 @@ class _BookAppointmentState extends State<BookAppointment> {
             label: "End Time",
             time: selectedEndTime,
             onTap: _selectEndTime,
-            enabled: selectedStartTime != null, // Enable only after start time is chosen
+            enabled: selectedStartTime != null,
           ),
         ),
       ],
     );
   }
 
-  // Helper for individual Time Picker UI
+  // Add helper for individual time picker
   Widget _buildTimePicker({
     required String label,
     required TimeOfDay? time,
     required VoidCallback onTap,
     bool enabled = true,
   }) {
-    MaterialLocalizations localizations = MaterialLocalizations.of(context); // For time formatting
     return Container(
-       decoration: BoxDecoration(
+      decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: enabled ? Colors.grey.shade400 : Colors.grey.shade300),
-         color: enabled ? Colors.grey[50] : Colors.grey[200], // Different color when disabled
+        color: enabled ? Colors.grey[50] : Colors.grey[200],
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: enabled ? onTap : null, // Disable tap if not enabled
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 12.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  // Use MaterialLocalizations to format time respecting locale/12-24hr settings
-                  time == null ? label : localizations.formatTimeOfDay(time, alwaysUse24HourFormat: false),
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: time == null
-                        ? (enabled ? Colors.grey.shade600 : Colors.grey.shade500)
-                        : (enabled ? Colors.black87 : Colors.grey.shade600),
+          onTap: enabled ? onTap : null,
+        child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 15.0, vertical: 12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    time == null ? label : time.format(context),
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: time == null
+                          ? (enabled ? Colors.grey.shade600 : Colors.grey.shade500)
+                          : (enabled ? Colors.black87 : Colors.grey.shade600),
+                    ),
                   ),
-                ),
-                Icon(Icons.access_time, color: enabled ? primaryPurple : Colors.grey.shade400),
-              ],
+                  Icon(Icons.access_time, 
+                       color: enabled ? primaryPurple : Colors.grey.shade400),
+                ],
+              ),
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 
-  // Helper for Service Dropdown UI
+  // Add helper for service dropdown
   Widget _buildServiceDropdown() {
     return Container(
-      width: double.infinity, // Take full width
+      width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 4.0),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
@@ -744,25 +834,22 @@ class _BookAppointmentState extends State<BookAppointment> {
           ),
           isExpanded: true,
           icon: Icon(Icons.arrow_drop_down, color: primaryPurple),
-          style: TextStyle(fontSize: 16, color: Colors.black87), // Default text style for items
-          dropdownColor: Colors.white, // Background color of the dropdown menu
           items: services.map<DropdownMenuItem<int>>((service) {
-            // Format price for display using intl package
-            final priceString = NumberFormat.currency(locale: 'en_PH', symbol: '₱').format(service['service_price'] ?? 0.0);
+            final priceString = NumberFormat.currency(
+              locale: 'en_PH', 
+              symbol: '₱'
+            ).format(service['service_price'] ?? 0.0);
             return DropdownMenuItem<int>(
               value: service['service_id'],
               child: Text(
-                "${service['service_name']} - $priceString", // Combine name and formatted price
-                overflow: TextOverflow.ellipsis, // Prevent long text overflow
-                style: TextStyle(color: Colors.black87),
+                "${service['service_name']} - $priceString",
+                overflow: TextOverflow.ellipsis,
               ),
             );
           }).toList(),
           onChanged: (value) {
             if (value != null) {
-              setState(() {
-                selectedServiceId = value;
-              });
+              setState(() => selectedServiceId = value);
             }
           },
         ),
@@ -770,7 +857,7 @@ class _BookAppointmentState extends State<BookAppointment> {
     );
   }
 
-  // Helper for Therapist Dropdown UI
+  // Add helper for therapist dropdown
   Widget _buildTherapistDropdown() {
     return Container(
       width: double.infinity,
@@ -778,97 +865,46 @@ class _BookAppointmentState extends State<BookAppointment> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: Colors.grey.shade400),
-         color: Colors.grey[50],
+        color: Colors.grey[50],
       ),
       child: DropdownButtonHideUnderline(
-        child: DropdownButton<int?>( // Use nullable int (int?) for value and items
+        child: DropdownButton<int?>(
           value: selectedTherapistId,
           hint: Text(
-            "Any Available Therapist", // Descriptive hint
+            "Any Available Therapist",
             style: TextStyle(color: Colors.grey.shade600, fontSize: 16)
           ),
           isExpanded: true,
-          icon: Icon(Icons.person_outline, color: primaryPurple), // Therapist icon
-          style: TextStyle(fontSize: 16, color: Colors.black87),
-          dropdownColor: Colors.white,
-          // Add the "Any" option explicitly as the first item
+          icon: Icon(Icons.person_outline, color: primaryPurple),
           items: [
             DropdownMenuItem<int?>(
-              value: null, // Null value represents "Any" or "No Preference"
+              value: null,
               child: Text(
                 "Any Available Therapist",
                 style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey.shade700),
               ),
             ),
-            // Map the fetched therapists to the rest of the dropdown items
             ...therapists.map<DropdownMenuItem<int?>>((therapist) {
               return DropdownMenuItem<int?>(
-                value: therapist['therapist_id'],
+                value: therapist['staff_id'],
                 child: Text(
-                  // Combine first and last name safely, handling potential nulls
                   "${therapist['first_name'] ?? ''} ${therapist['last_name'] ?? ''}".trim(),
-                   style: TextStyle(color: Colors.black87),
                 ),
               );
             }),
           ],
-          onChanged: (value) {
-            // Update the selected therapist ID (can be null)
-            setState(() {
-              selectedTherapistId = value;  // Update to use private variable
-            });
-            // Remove the _findNextAvailableSlot call
-          },
+          onChanged: (value) => setState(() => selectedTherapistId = value),
         ),
       ),
     );
   }
 
-  // Helper for the main Booking Button UI
-  Widget _buildBookingButton() {
-    return SizedBox(
-      width: double.infinity, // Make button take full width
-      child: ElevatedButton(
-        // Disable button when loading, otherwise call _bookAppointment
-        onPressed: isLoading ? null : _processBooking,  // Updated to use _processBooking
-        style: ElevatedButton.styleFrom(
-          backgroundColor: primaryPurple, // Main button color
-          foregroundColor: Colors.white, // Text color
-          padding: EdgeInsets.symmetric(vertical: 15),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10), // Rounded corners
-          ),
-          textStyle: TextStyle(
-            fontSize: 17,
-            fontWeight: FontWeight.bold,
-          ),
-          elevation: 3, // Subtle shadow
-        ).copyWith(
-           // Handle disabled state color
-           backgroundColor: MaterialStateProperty.resolveWith<Color?>(
-            (Set<MaterialState> states) {
-              if (states.contains(MaterialState.disabled)) {
-                return lightPurple.withOpacity(0.5); // Lighter purple when disabled
-              }
-              return primaryPurple; // Normal color
-            },
-          ),
-        ),
-        child: isLoading
-          ? SizedBox( // Show loading indicator when processing
-              height: 20,
-              width: 20,
-              child: CircularProgressIndicator(
-                color: Colors.white, // White spinner on purple background
-                strokeWidth: 3,
-              ),
-            )
-          : Text("Confirm Booking"), // Button text
-      ),
-    );
+  // Add this helper method to convert TimeOfDay to minutes since midnight
+  int _timeToMinutes(TimeOfDay time) {
+    return time.hour * 60 + time.minute;
   }
 
-  // Add this new validation method
+  // Update the time validation logic
   bool _validateSpaHours(TimeOfDay time) {
     if (spaOpeningTime == null || spaClosingTime == null) return true;
 
@@ -877,19 +913,23 @@ class _BookAppointmentState extends State<BookAppointment> {
     int openingInMinutes = spaOpeningTime!.hour * 60 + spaOpeningTime!.minute;
     int closingInMinutes = spaClosingTime!.hour * 60 + spaClosingTime!.minute;
 
+    // Handle cases where closing time is on the next day
+    if (closingInMinutes < openingInMinutes) {
+      closingInMinutes += 24 * 60; // Add 24 hours
+      if (timeInMinutes < openingInMinutes) {
+        timeInMinutes += 24 * 60; // Add 24 hours if time is after midnight
+      }
+    }
+
     return timeInMinutes >= openingInMinutes && timeInMinutes <= closingInMinutes;
   }
 
   // Update the existing _validateBooking method
   bool _validateBooking() {
+    final now = DateTime.now();
+    
     if (selectedDate == null) {
       _showError("Please select a date.");
-      return false;
-    }
-
-    // Validate date is not in the past
-    if (selectedDate!.isBefore(DateTime.now().subtract(Duration(days: 1)))) {
-      _showError("Cannot book appointments for past dates.");
       return false;
     }
 
@@ -898,22 +938,18 @@ class _BookAppointmentState extends State<BookAppointment> {
       return false;
     }
 
-    // Convert times to DateTime for comparison
-    final now = DateTime.now();
-    final startDateTime = DateTime(
+    // Create DateTime objects for comparison
+    final selectedDateTime = DateTime(
       selectedDate!.year,
       selectedDate!.month,
       selectedDate!.day,
-      selectedStartTime!.hour,
-      selectedStartTime!.minute,
+      selectedStartTime?.hour ?? 0,
+      selectedStartTime?.minute ?? 0,
     );
 
-    // If booking for today, ensure time is in the future
-    if (selectedDate!.day == now.day &&
-        selectedDate!.month == now.month &&
-        selectedDate!.year == now.year &&
-        startDateTime.isBefore(now)) {
-      _showError("Cannot book appointments for past times.");
+    // Check if the selected time is in the past
+    if (selectedDateTime.isBefore(now)) {
+      _showError("Cannot book appointments in the past.");
       return false;
     }
 
@@ -939,6 +975,36 @@ class _BookAppointmentState extends State<BookAppointment> {
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), backgroundColor: Colors.red),
+    );
+  }
+
+  Widget _buildBookingButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: isLoading ? null : _processBooking,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primaryPurple,
+          foregroundColor: Colors.white,
+          padding: EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        child: isLoading
+          ? SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                strokeWidth: 2,
+              ),
+            )
+          : Text(
+              "Book Appointment",
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+      ),
     );
   }
 

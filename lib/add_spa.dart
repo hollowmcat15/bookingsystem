@@ -41,7 +41,17 @@ class _AddSpaState extends State<AddSpa> {
   TimeOfDay _closingTime = TimeOfDay(hour: 21, minute: 0);  // default 9:00 PM
 
   @override
+  void initState() {
+    super.initState();
+    // Add listener to update counter text
+    _phoneController.addListener(() {
+      setState(() {}); // This will rebuild with updated counter text
+    });
+  }
+
+  @override
   void dispose() {
+    _phoneController.removeListener(() { }); // Clean up listener
     _nameController.dispose();
     _addressController.dispose();
     _postalCodeController.dispose();
@@ -155,7 +165,7 @@ class _AddSpaState extends State<AddSpa> {
         'updated_at': DateTime.now().toIso8601String(),
       });
 
-      // Add default services
+      // Add default services with unique IDs
       final List<Map<String, dynamic>> defaultServices = [
         {'name': 'Foot massage', 'price': 650.00},
         {'name': 'Thai body massage', 'price': 650.00},
@@ -165,14 +175,25 @@ class _AddSpaState extends State<AddSpa> {
         {'name': 'Aroma oil massage', 'price': 800.00},
       ];
 
-      for (var service in defaultServices) {
+      // Create a base timestamp for service IDs
+      final baseTimestamp = DateTime.now().millisecondsSinceEpoch;
+      final random = DateTime.now().microsecondsSinceEpoch; // Additional randomness
+
+      for (var i = 0; i < defaultServices.length; i++) {
+        final service = defaultServices[i];
+        // Generate a unique service ID by combining timestamp, random number, and index
+        final serviceId = (baseTimestamp % 10000000) * 10 + // Use last 7 digits of timestamp
+                         (random % 100000) + // Add microseconds for randomness
+                         ((i + 1) * 1000000); // Ensure each service in batch has different ID
+        
         await supabase.from('service').insert({
+          'service_id': serviceId % 100000000, // Ensure it stays within 8 digits
           'spa_id': newSpaId,
           'service_name': service['name'],
           'service_price': service['price'],
+          'is_archived': false,  // Add this line
           'created_at': DateTime.now().toIso8601String(),
           'updated_at': DateTime.now().toIso8601String(),
-          'is_archived': false,
         });
       }
       
@@ -306,11 +327,16 @@ class _AddSpaState extends State<AddSpa> {
                 decoration: InputDecoration(
                   labelText: 'Phone Number',
                   border: OutlineInputBorder(),
+                  counterText: '${_phoneController.text.length}/11',
                 ),
                 keyboardType: TextInputType.phone,
+                maxLength: 11,  // Add this line to limit input length
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Please enter phone number';
+                  }
+                  if (value.length != 11) {
+                    return 'Phone number must be 11 digits';
                   }
                   return null;
                 },

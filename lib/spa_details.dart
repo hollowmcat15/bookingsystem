@@ -80,7 +80,7 @@ class _SpaDetailsState extends State<SpaDetails> {
     try {
       final response = await _supabase
           .from('spa')
-          .select('spa_name, spa_address, spa_phonenumber, description, image_url')
+          .select('spa_name, spa_address, spa_phonenumber, description, image_url, opening_time, closing_time')  // Add times
           .eq('spa_id', widget.spaId)
           .maybeSingle();
 
@@ -285,110 +285,122 @@ Future<void> _fetchReviews() async {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
-              title: Text("Leave a Review"),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Service selection dropdown
-                    DropdownButtonFormField<int>(
-                      decoration: InputDecoration(labelText: "Select a Service"),
-                      value: selectedServiceId,
-                      hint: Text("Select a service to review"),
-                      items: _services.map((service) {
-                        return DropdownMenuItem<int>(
-                          value: service['service_id'],
-                          child: Text(service['service_name']),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        setState(() {
-                          selectedServiceId = value;
-                        });
-                      },
-                    ),
-                    SizedBox(height: 16),
-                    TextField(
-                      controller: titleController,
-                      decoration: InputDecoration(labelText: "Review Title"),
-                    ),
-                    TextField(
-                      controller: reviewController,
-                      decoration: InputDecoration(labelText: "Write your review..."),
-                      maxLines: 3,
-                    ),
-                    SizedBox(height: 24),
-                    Text(
-                      "Rate your experience:",
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                    ),
-                    SizedBox(height: 8),
-                    // Google Play Store style rating
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(5, (index) {
-                        return GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              selectedRating = index + 1;
-                            });
-                          },
-                          child: Container(
-                            padding: EdgeInsets.symmetric(horizontal: 4),
-                            child: Icon(
-                              index < selectedRating 
-                                ? Icons.star_rate_rounded 
-                                : Icons.star_border_rounded,
-                              size: 40,
-                              color: index < selectedRating 
-                                ? Colors.amber
-                                : Colors.grey[400],
+            return Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: 400, // Fixed maximum width
+                  maxHeight: MediaQuery.of(context).size.height * 0.8, // 80% of screen height
+                ),
+                child: AlertDialog(
+                  contentPadding: EdgeInsets.all(24),
+                  title: Text("Leave a Review"),
+                  content: Container(
+                    width: 400, // Fixed width
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Service selection dropdown
+                          DropdownButtonFormField<int>(
+                            decoration: InputDecoration(labelText: "Select a Service"),
+                            value: selectedServiceId,
+                            hint: Text("Select a service to review"),
+                            items: _services.map((service) {
+                              return DropdownMenuItem<int>(
+                                value: service['service_id'],
+                                child: Text(service['service_name']),
+                              );
+                            }).toList(),
+                            onChanged: (value) {
+                              setState(() {
+                                selectedServiceId = value;
+                              });
+                            },
+                          ),
+                          SizedBox(height: 16),
+                          TextField(
+                            controller: titleController,
+                            decoration: InputDecoration(labelText: "Review Title"),
+                          ),
+                          TextField(
+                            controller: reviewController,
+                            decoration: InputDecoration(labelText: "Write your review..."),
+                            maxLines: 3,
+                          ),
+                          SizedBox(height: 24),
+                          Text(
+                            "Rate your experience:",
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          ),
+                          SizedBox(height: 8),
+                          // Google Play Store style rating
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: List.generate(5, (index) {
+                              return GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    selectedRating = index + 1;
+                                  });
+                                },
+                                child: Container(
+                                  padding: EdgeInsets.symmetric(horizontal: 4),
+                                  child: Icon(
+                                    index < selectedRating 
+                                      ? Icons.star_rate_rounded 
+                                      : Icons.star_border_rounded,
+                                    size: 40,
+                                    color: index < selectedRating 
+                                      ? Colors.amber
+                                      : Colors.grey[400],
+                                  ),
+                                ),
+                              );
+                            }),
+                          ),
+                          Text(
+                            _getRatingDescription(selectedRating),
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
                             ),
                           ),
-                        );
-                      }),
-                    ),
-                    Text(
-                      _getRatingDescription(selectedRating),
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                        fontStyle: FontStyle.italic,
+                        ],
                       ),
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: Text("Cancel"),
+                    ),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (titleController.text.isEmpty || 
+                            reviewController.text.isEmpty || 
+                            selectedServiceId == null) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text("Please fill in all fields"),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                          return;
+                        }
+                        _submitReview(
+                          selectedRating,
+                          titleController.text,
+                          reviewController.text,
+                          selectedServiceId!,
+                        );
+                        Navigator.pop(context);
+                      },
+                      child: Text("Submit"),
                     ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text("Cancel"),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    if (titleController.text.isEmpty || 
-                        reviewController.text.isEmpty || 
-                        selectedServiceId == null) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text("Please fill in all fields"),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                      return;
-                    }
-                    _submitReview(
-                      selectedRating,
-                      titleController.text,
-                      reviewController.text,
-                      selectedServiceId!,
-                    );
-                    Navigator.pop(context);
-                  },
-                  child: Text("Submit"),
-                ),
-              ],
             );
           },
         );
@@ -582,6 +594,16 @@ Future<void> _fetchReviews() async {
                               "Phone: ${_spa?['spa_phonenumber'] ?? 'N/A'}",
                               style: TextStyle(fontSize: 16),
                             ),
+                            Row(
+                              children: [
+                                Icon(Icons.access_time, size: 16, color: Colors.grey[700]),
+                                SizedBox(width: 8),
+                                Text(
+                                  "Hours: ${_formatTime(_spa?['opening_time'])} - ${_formatTime(_spa?['closing_time'])}",
+                                  style: TextStyle(fontSize: 16),
+                                ),
+                              ],
+                            ),
                             SizedBox(height: 16),
 
                             // Services Section
@@ -702,5 +724,20 @@ Future<void> _fetchReviews() async {
                   ),
                 ),
     );
+  }
+
+  // Add this helper method to format time
+  String _formatTime(String? timeString) {
+    if (timeString == null) return 'N/A';
+    try {
+      final parts = timeString.split(':');
+      final hour = int.parse(parts[0]);
+      final minute = parts[1];
+      final period = hour >= 12 ? 'PM' : 'AM';
+      final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+      return '$displayHour:$minute $period';
+    } catch (e) {
+      return timeString;
+    }
   }
 }

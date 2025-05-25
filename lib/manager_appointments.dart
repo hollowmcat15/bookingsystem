@@ -39,23 +39,26 @@ class _ManagerAppointmentsPageState extends State<ManagerAppointmentsPage> {
     });
 
     try {
-      // Load appointments
+      // Load appointments with correct joins
       final appointmentsResponse = await _supabase
           .from('appointment')
           .select('''
             *,
             client:client_id(client_id, first_name, last_name, email, phonenumber),
             service:service_id(service_id, service_name, service_price),
-            therapist:therapist_id(therapist_id, first_name, last_name)
+            staff!therapist_id(staff_id, first_name, last_name)
           ''')
           .eq('spa_id', widget.spaId)
-          .order('booking_date', ascending: false);
+          .order('booking_date', ascending: false)  // newest first
+          .order('booking_start_time', ascending: false);  // if same date, show latest time first
 
-      // Load therapists for this spa
+      // Load therapists from staff table
       final therapistsResponse = await _supabase
-          .from('therapist')
-          .select('*')
-          .eq('spa_id', widget.spaId);
+          .from('staff')
+          .select('staff_id, first_name, last_name')
+          .eq('spa_id', widget.spaId)
+          .eq('role', 'Therapist')
+          .eq('is_active', true);
 
       // Load services for this spa
       final servicesResponse = await _supabase
@@ -261,7 +264,7 @@ class _ManagerAppointmentsPageState extends State<ManagerAppointmentsPage> {
                             final appointment = _filteredAppointments[index];
                             final client = appointment['client'] ?? {};
                             final service = appointment['service'] ?? {};
-                            final therapist = appointment['therapist'] ?? {};
+                            final therapist = appointment['staff'] ?? {}; // Changed from 'therapist' to 'staff'
                             final bookingDate = DateTime.parse(appointment['booking_date']);
                             final startTime = appointment['booking_start_time'];
                             final status = appointment['status'];
@@ -329,8 +332,7 @@ class _ManagerAppointmentsPageState extends State<ManagerAppointmentsPage> {
                                 onTap: () => _showAppointmentDetails(appointment),
                               ),
                             );
-                          },
-                        ),
+                          }),
                 ),
               ],
             ),
@@ -381,11 +383,14 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
   late TimeOfDay _startTime;
   late TimeOfDay _endTime;
   bool _isUpdating = false;
+  TimeOfDay? spaOpeningTime;
+  TimeOfDay? spaClosingTime;
 
   @override
   void initState() {
     super.initState();
-    _selectedTherapistId = widget.appointment['therapist_id'];
+    // Fix therapist_id mapping
+    _selectedTherapistId = widget.appointment['therapist_id']; // Changed from staff_id to therapist_id
     _selectedServiceId = widget.appointment['service_id'];
     _selectedStatus = widget.appointment['status'];
     _selectedDate = DateTime.parse(widget.appointment['booking_date']);
@@ -407,6 +412,164 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
       _startTime = TimeOfDay.now();
       _endTime = TimeOfDay.now();
     }
+
+    _fetchSpaHours();
+  }
+
+  Future<void> _fetchSpaHours() async {
+    try {
+      final response = await widget.supabase
+          .from('spa')
+          .select('opening_time, closing_time')
+          .eq('spa_id', widget.appointment['spa_id'])
+          .single();
+
+      if (response != null) {
+        setState(() {
+          final openingTimeParts = response['opening_time'].split(':');
+          final closingTimeParts = response['closing_time'].split('');
+          
+          spaOpeningTime = TimeOfDay(
+            hour: int.parse(openingTimeParts[0]),
+            minute: int.parse(openingTimeParts[1])
+          );
+          
+          spaClosingTime = TimeOfDay(
+            hour: int.parse(closingTimeParts[0]),
+            minute: int.parse(closingTimeParts[1])
+          );
+        });
+      }
+    } catch (e) {
+      print("Error fetching spa hours: $e");
+    }
+  }
+
+  int _timeToMinutes(TimeOfDay time) {
+    return time.hour * 60 + time.minute;
+  }
+
+  bool _validateSpaHours(TimeOfDay time) {
+    if (spaOpeningTime == null || spaClosingTime == null) return true;
+
+    int timeInMinutes = _timeToMinutes(time);
+    int openingInMinutes = _timeToMinutes(spaOpeningTime!);
+    int closingInMinutes = _timeToMinutes(spaClosingTime!);
+
+    if (closingInMinutes < openingInMinutes) {
+      closingInMinutes += 24 * 60;
+      if (timeInMinutes < openingInMinutes) {
+        timeInMinutes += 24 * 60;
+      }
+    }
+
+    return timeInMinutes >= openingInMinutes && timeInMinutes <= closingInMinutes;
+  }
+
+  Future<void> _selectStartTime(BuildContext context) async {
+    final now = TimeOfDay.now();
+    final isToday = _selectedDate.year == DateTime.now().year &&
+                    _selectedDate.month == DateTime.now().month &&
+                    _selectedDate.day == DateTime.now().day;
+
+    // Set minimum time based on current time for today's appointments
+    TimeOfDay minimumTime = isToday 
+        ? now 
+        : spaOpeningTime ?? const TimeOfDay(hour: 9, minute: 0);
+
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _startTime,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            timePickerTheme: TimePickerThemeData(
+              dayPeriodTextColor: Theme.of(context).primaryColor,
+              hourMinuteTextColor: Theme.of(context).primaryColor,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      // Past time validation
+      if (_selectedDate.isBefore(DateTime.now())) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot schedule appointments in the past'),
+            backgroundColor: Colors.red,
+          )
+        );
+        return;
+      }
+
+      if (isToday && _timeToMinutes(picked) < _timeToMinutes(now)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot select a time in the past'),
+            backgroundColor: Colors.red,
+          )
+        );
+        return;
+      }
+
+      // Spa hours validation
+      if (!_validateSpaHours(picked)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Selected time must be within spa operating hours: ' +
+              '${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}'
+            ),
+            backgroundColor: Colors.red,
+          )
+        );
+        return;
+      }
+
+      setState(() {
+        _startTime = picked;
+        // Automatically set end time 1 hour after start time
+        _endTime = TimeOfDay(
+          hour: (_startTime.hour + 1) % 24,
+          minute: _startTime.minute,
+        );
+      });
+    }
+  }
+
+  Future<void> _selectEndTime(BuildContext context) async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _endTime,
+    );
+
+    if (picked != null) {
+      // Validate against spa hours
+      if (!_validateSpaHours(picked)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(
+            'Selected time must be within spa operating hours: ' +
+            '${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}'
+          ))
+        );
+        return;
+      }
+
+      // Validate end time is after start time
+      if (_timeToMinutes(picked) <= _timeToMinutes(_startTime)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('End time must be after start time'))
+        );
+        return;
+      }
+
+      setState(() {
+        _endTime = picked;
+      });
+    }
   }
 
   // Add this new method to check for conflicts
@@ -417,7 +580,7 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
     try {
       final response = await widget.supabase
           .from('appointment')
-          .select('*, therapist:therapist(first_name, last_name)')
+          .select('*, staff!therapist_id(first_name, last_name)') // Updated join
           .eq('booking_date', _selectedDate.toIso8601String().split('T')[0])
           .eq('status', 'Scheduled')
           .neq('book_id', widget.appointment['book_id']) // Exclude current appointment
@@ -453,11 +616,39 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
   // Modify the _updateAppointment method to include conflict check
   Future<void> _updateAppointment() async {
     if (_isUpdating) return;
-    
+
     // Validate required fields
     if (_selectedTherapistId == null || _selectedServiceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select both therapist and service')),
+        const SnackBar(
+          content: Text('Please select both therapist and service'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Validate date is not in the past
+    if (_isDateInPast(_selectedDate)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot schedule appointments in the past'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    // Check if selected times are within spa hours
+    if (!_validateSpaHours(_startTime) || !_validateSpaHours(_endTime)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Selected times must be within spa operating hours: ' +
+            '${spaOpeningTime!.format(context)} - ${spaClosingTime!.format(context)}'
+          ),
+          backgroundColor: Colors.red,
+        ),
       );
       return;
     }
@@ -529,15 +720,18 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Cancel Booking'),
-        content: const Text('Are you sure you want to cancel this booking?'),
+        content: const Text(
+          'Are you sure you want to cancel this appointment? This action cannot be undone.'
+        ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
+            child: const Text('No, Keep It'),
+            onPressed: () => Navigator.of(context).pop(false),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes'),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Yes, Cancel'),
+            onPressed: () => Navigator.of(context).pop(true),
           ),
         ],
       ),
@@ -572,218 +766,379 @@ class _AppointmentDetailsDialogState extends State<AppointmentDetailsDialog> {
       orElse: () => {'service_price': 0},
     )['service_price'];
 
-    return AlertDialog(
-      title: const Text('Appointment Details'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Client Information',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              title: Text('${client['first_name'] ?? 'Unknown'} ${client['last_name'] ?? ''}'),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Email: ${client['email'] ?? 'N/A'}'),
-                  Text('Phone: ${client['phonenumber'] ?? 'N/A'}'),
-                ],
-              ),
-            ),
-            const Divider(),
-            const Text(
-              'Appointment Details',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            
-            // Service selection
-            DropdownButtonFormField<int?>(
-              decoration: const InputDecoration(
-                labelText: 'Service',
-                border: OutlineInputBorder(),
-              ),
-              value: _selectedServiceId,
-              items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('Select a service'),
-                ),
-                ...widget.services.map((service) {
-                  return DropdownMenuItem<int?>(
-                    value: service['service_id'],
-                    child: Text('${service['service_name']} - ₱${service['service_price']}'),
-                  );
-                }).toList(),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedServiceId = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            
-            // Therapist selection
-            DropdownButtonFormField<int?>(
-              decoration: const InputDecoration(
-                labelText: 'Therapist',
-                border: OutlineInputBorder(),
-              ),
-              value: _selectedTherapistId,
-              items: [
-                const DropdownMenuItem<int?>(
-                  value: null,
-                  child: Text('Select a therapist'),
-                ),
-                ...widget.therapists.map((therapist) {
-                  return DropdownMenuItem<int?>(
-                    value: therapist['therapist_id'],
-                    child: Text('${therapist['first_name']} ${therapist['last_name']}'),
-                  );
-                }).toList(),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedTherapistId = value;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            
-            // Status selection
-            DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                labelText: 'Status',
-                border: OutlineInputBorder(),
-              ),
-              value: _selectedStatus,
-              items: const [
-                DropdownMenuItem(value: 'Scheduled', child: Text('Scheduled')),
-                DropdownMenuItem(value: 'Completed', child: Text('Completed')),
-                DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
-                DropdownMenuItem(value: 'Rescheduled', child: Text('Rescheduled')),
-              ],
-              onChanged: (value) {
-                setState(() {
-                  _selectedStatus = value!;
-                });
-              },
-            ),
-            const SizedBox(height: 8),
-            
-            // Date picker
-            InkWell(
-              onTap: () async {
-                final picked = await showDatePicker(
-                  context: context,
-                  initialDate: _selectedDate,
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2030),
-                );
-                if (picked != null) {
-                  setState(() {
-                    _selectedDate = picked;
-                  });
-                }
-              },
-              child: InputDecorator(
-                decoration: const InputDecoration(
-                  labelText: 'Date',
-                  border: OutlineInputBorder(),
-                  suffixIcon: Icon(Icons.calendar_today),
-                ),
-                child: Text(DateFormat('MMM dd, yyyy').format(_selectedDate)),
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            // Time pickers
-            Row(
-              children: [
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: _startTime,
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          _startTime = picked;
-                        });
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'Start Time',
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.access_time),
-                      ),
-                      child: Text(_startTime.format(context)),
-                    ),
+    return Dialog(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: MediaQuery.of(context).size.width * 0.9,
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        child: Container(
+          width: 500, // Fixed width
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: InkWell(
-                    onTap: () async {
-                      final picked = await showTimePicker(
-                        context: context,
-                        initialTime: _endTime,
-                      );
-                      if (picked != null) {
-                        setState(() {
-                          _endTime = picked;
-                        });
-                      }
-                    },
-                    child: InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: 'End Time',
-                        border: OutlineInputBorder(),
-                        suffixIcon: Icon(Icons.access_time),
+                child: const Row(
+                  children: [
+                    Icon(Icons.edit_calendar, color: Colors.white),
+                    SizedBox(width: 8),
+                    Text(
+                      'Appointment Details',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
-                      child: Text(_endTime.format(context)),
                     ),
+                  ],
+                ),
+              ),
+              // Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Client Information Card
+                      Card(
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.person, color: Colors.grey),
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    'Client Information',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const Divider(),
+                              Text(
+                                '${client['first_name'] ?? 'Unknown'} ${client['last_name'] ?? ''}',
+                                style: const TextStyle(fontSize: 16),
+                              ),
+                              const SizedBox(height: 4),
+                              Text('Email: ${client['email'] ?? 'N/A'}'),
+                              Text('Phone: ${client['phonenumber'] ?? 'N/A'}'),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Appointment Details Section
+                      // ...existing form fields code remains the same...
+
+                      // Add some styling to the dropdowns and input decorators
+                      Theme(
+                        data: Theme.of(context).copyWith(
+                          inputDecorationTheme: InputDecorationTheme(
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                          ),
+                        ),
+                        child: Column(
+                          children: [
+                            // Service selection
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              child: DropdownButtonFormField<int?>(
+                                decoration: const InputDecoration(
+                                  labelText: 'Service',
+                                  prefixIcon: Icon(Icons.spa),
+                                ),
+                                value: _selectedServiceId,
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text('Select a service'),
+                                  ),
+                                  ...widget.services.map((service) {
+                                    return DropdownMenuItem<int?>(
+                                      value: service['service_id'],
+                                      child: Text('${service['service_name']} - ₱${service['service_price']}'),
+                                    );
+                                  }).toList(),
+                                ],
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedServiceId = value;
+                                  });
+                                },
+                              ),
+                            ),
+                            // Therapist selection
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              child: DropdownButtonFormField<int?>(
+                                decoration: const InputDecoration(
+                                  labelText: 'Therapist',
+                                  prefixIcon: Icon(Icons.person),
+                                ),
+                                value: _selectedTherapistId,
+                                items: [
+                                  const DropdownMenuItem<int?>(
+                                    value: null,
+                                    child: Text('Select a therapist'),
+                                  ),
+                                  ...widget.therapists.map((therapist) {
+                                    return DropdownMenuItem<int?>(
+                                      value: therapist['staff_id'], // Changed from therapist_id
+                                      child: Text('${therapist['first_name']} ${therapist['last_name']}'),
+                                    );
+                                  }).toList(),
+                                ],
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedTherapistId = value;
+                                  });
+                                },
+                              ),
+                            ),
+                            // Status selection
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              child: DropdownButtonFormField<String>(
+                                decoration: const InputDecoration(
+                                  labelText: 'Status',
+                                  prefixIcon: Icon(Icons.schedule),
+                                ),
+                                value: _selectedStatus,
+                                items: const [
+                                  DropdownMenuItem(value: 'Scheduled', child: Text('Scheduled')),
+                                  DropdownMenuItem(value: 'Completed', child: Text('Completed')),
+                                  DropdownMenuItem(value: 'Cancelled', child: Text('Cancelled')),
+                                  DropdownMenuItem(value: 'Rescheduled', child: Text('Rescheduled')),
+                                ],
+                                onChanged: (value) {
+                                  setState(() {
+                                    _selectedStatus = value!;
+                                  });
+                                },
+                              ),
+                            ),
+                            // Date picker
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 24), // Increased bottom margin
+                              child: InkWell(
+                                onTap: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: _selectedDate,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2030),
+                                  );
+                                  if (picked != null) {
+                                    setState(() {
+                                      _selectedDate = picked;
+                                    });
+                                  }
+                                },
+                                child: InputDecorator(
+                                  decoration: const InputDecoration(
+                                    labelText: 'Date',
+                                    border: OutlineInputBorder(),
+                                    suffixIcon: Icon(Icons.calendar_today),
+                                  ),
+                                  child: Text(DateFormat('MMM dd, yyyy').format(_selectedDate)),
+                                ),
+                              ),
+                            ),
+                            // Time pickers with section header
+                            const Padding(
+                              padding: EdgeInsets.only(bottom: 8.0),
+                              child: Text(
+                                'Appointment Time',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () async {
+                                      final picked = await showTimePicker(
+                                        context: context,
+                                        initialTime: _startTime,
+                                      );
+                                      if (picked != null) {
+                                        setState(() {
+                                          _startTime = picked;
+                                          // Automatically set end time 1 hour later
+                                          _endTime = TimeOfDay(
+                                            hour: (_startTime.hour + 1) % 24,
+                                            minute: _startTime.minute,
+                                          );
+                                        });
+                                      }
+                                    },
+                                    child: InputDecorator(
+                                      decoration: const InputDecoration(
+                                        labelText: 'Start Time',
+                                        border: OutlineInputBorder(),
+                                        suffixIcon: Icon(Icons.access_time),
+                                      ),
+                                      child: Text(_startTime.format(context)),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () async {
+                                      if (_timeToMinutes(_endTime) <= _timeToMinutes(_startTime)) {
+                                        // Set initial time to 1 hour after start time
+                                        _endTime = TimeOfDay(
+                                          hour: (_startTime.hour + 1) % 24,
+                                          minute: _startTime.minute,
+                                        );
+                                      }
+
+                                      final picked = await showTimePicker(
+                                        context: context,
+                                        initialTime: _endTime,
+                                      );
+
+                                      if (picked != null) {
+                                        // Validate end time is after start time
+                                        if (_timeToMinutes(picked) <= _timeToMinutes(_startTime)) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('End time must be after start time')),
+                                          );
+                                          return;
+                                        }
+                                        setState(() {
+                                          _endTime = picked;
+                                        });
+                                      }
+                                    },
+                                    child: InputDecorator(
+                                      decoration: const InputDecoration(
+                                        labelText: 'End Time',
+                                        border: OutlineInputBorder(),
+                                        suffixIcon: Icon(Icons.access_time),
+                                      ),
+                                      child: Text(_endTime.format(context)),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Service Fee: ₱${servicePrice.toStringAsFixed(2)}',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Service Fee: ₱${servicePrice.toStringAsFixed(2)}',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-          ],
+              ),
+              // Actions
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[100],
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(16),
+                    bottomRight: Radius.circular(16),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    if (_selectedStatus == 'Scheduled')
+                      TextButton.icon(
+                        icon: const Icon(Icons.cancel),
+                        label: const Text('Cancel Booking'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.white,
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        onPressed: _cancelBooking,
+                      ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      icon: const Icon(Icons.close),
+                      label: const Text('Back'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.grey[800],
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      icon: _isUpdating 
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : const Icon(Icons.save),
+                      label: Text(_isUpdating ? 'Saving...' : 'Save Changes'),
+                      style: ElevatedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        backgroundColor: Theme.of(context).primaryColor,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      onPressed: _isUpdating ? null : _updateAppointment,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        if (_selectedStatus == 'Scheduled')
-          TextButton(
-            onPressed: _cancelBooking,
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Cancel Booking'),
-          ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Back'),
-        ),
-        ElevatedButton(
-          onPressed: _isUpdating ? null : _updateAppointment,
-          child: _isUpdating
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Save'),
-        ),
-      ],
     );
+  }
+
+  // Add this helper method to check if a date is in the past
+  bool _isDateInPast(DateTime date) {
+    final now = DateTime.now();
+    return date.isBefore(DateTime(now.year, now.month, now.day));
   }
 }

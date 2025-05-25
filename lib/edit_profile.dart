@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; // Add this import for date formatting
+import 'package:intl/intl.dart';
+import 'widgets/otp_verification_dialog.dart';
+import 'login.dart';  // Updated import
 
 class EditProfilePage extends StatefulWidget {
   final String userRole;
@@ -86,26 +88,37 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   // In the _setupBasedOnRole() method, add a case for 'receptionist'
 void _setupBasedOnRole() {
-  // Get current user ID and email
   _userId = supabase.auth.currentUser?.id;
   _userEmail = supabase.auth.currentUser?.email;
   
-  print("Current user role: ${widget.userRole}");
-  print("Current user email: $_userEmail");
-  
-  // Set up table and field names based on user role
   switch (widget.userRole.toLowerCase()) {
+    case 'admin':
+      _tableName = 'admin';
+      _userIdField = 'admin_id';
+      _firstNameField = 'first_name';
+      _lastNameField = 'last_name';
+      _phoneField = null;
+      _hasAddressField = false;
+      _hasBirthdayField = false;
+      _hasStatusField = false;
+      break;
+      
     case 'manager':
-      _tableName = 'manager';
-      _userIdField = 'manager_id';
+    case 'therapist':
+    case 'receptionist':
+      _tableName = 'staff';
+      _userIdField = 'staff_id';
       _firstNameField = 'first_name';
       _lastNameField = 'last_name';
       _phoneField = 'phonenumber';
       _birthdayField = 'birthday';
+      _addressField = null;
       _hasAddressField = false;
       _hasBirthdayField = true;
-      _hasStatusField = false;
+      _hasStatusField = false; // Receptionists don't have status
+      _statusField = null;
       break;
+
     case 'client':
       _tableName = 'client';
       _userIdField = 'client_id';
@@ -118,29 +131,7 @@ void _setupBasedOnRole() {
       _hasBirthdayField = true;
       _hasStatusField = false;
       break;
-    case 'therapist':
-      _tableName = 'therapist';
-      _userIdField = 'therapist_id';
-      _firstNameField = 'first_name';
-      _lastNameField = 'last_name';
-      _phoneField = 'phonenumber';
-      _birthdayField = 'birthday';
-      _statusField = 'status';
-      _hasAddressField = false;
-      _hasBirthdayField = true;
-      _hasStatusField = true;
-      break;
-    case 'receptionist':
-      _tableName = 'receptionist';
-      _userIdField = 'receptionist_id';
-      _firstNameField = 'first_name';
-      _lastNameField = 'last_name';
-      _phoneField = 'phonenumber';
-      _birthdayField = 'birthday';
-      _hasAddressField = false;
-      _hasBirthdayField = true;
-      _hasStatusField = false;
-      break;
+
     default:
       _error = 'Invalid user role';
   }
@@ -208,43 +199,26 @@ void _setupBasedOnRole() {
         _error = null;
       });
 
-      // For managers and therapists, we might need to try both email and auth_id
-      if (widget.userRole.toLowerCase() == 'manager' || widget.userRole.toLowerCase() == 'therapist') {
-        try {
-          // First try to get user by email
-          final response = await supabase
-              .from(_tableName!)
-              .select()
-              .eq('email', _userEmail!)
-              .limit(1);
-          
-          if (response != null && response.isNotEmpty) {
-            setState(() {
-              _userData = response[0];
-            });
-          } else if (_userId != null) {
-            // If email doesn't work, try auth_id
-            final authResponse = await supabase
-                .from(_tableName!)
-                .select()
-                .eq('auth_id', _userId!)
-                .limit(1);
-                
-            if (authResponse != null && authResponse.isNotEmpty) {
-              setState(() {
-                _userData = authResponse[0];
-              });
-            } else {
-              throw Exception('No profile found for ${widget.userRole}');
-            }
-          } else {
-            throw Exception('No profile found for ${widget.userRole}');
-          }
-        } catch (e) {
-          throw Exception('Failed to fetch ${widget.userRole} profile: ${e.toString()}');
+      // For staff members (manager, therapist, receptionist)
+      if (['manager', 'therapist', 'receptionist'].contains(widget.userRole.toLowerCase())) {
+        final response = await supabase
+            .from('staff')
+            .select()
+            .eq('email', _userEmail!)
+            .eq('role', widget.userRole.capitalize()) // Make sure role matches exactly
+            .limit(1);
+        
+        if (response != null && response.isNotEmpty) {
+          setState(() {
+            _userData = response[0];
+            _currentStatus = response[0]['status'];
+            _isLoading = false;
+          });
+        } else {
+          throw Exception('Staff profile not found');
         }
       } else {
-        // For clients, just use email
+        // For clients and admin, use their respective tables
         final response = await supabase
             .from(_tableName!)
             .select()
@@ -254,19 +228,14 @@ void _setupBasedOnRole() {
         if (response != null && response.isNotEmpty) {
           setState(() {
             _userData = response[0];
+            _isLoading = false;
           });
         } else {
-          throw Exception('No client profile found');
+          throw Exception('Profile not found');
         }
       }
       
-      print("Found user data: $_userData");
-      
-      // Populate form fields with retrieved data
       _populateFormFields();
-      setState(() {
-        _isLoading = false;
-      });
     } catch (e) {
       setState(() {
         _error = 'Could not find user profile: ${e.toString()}';
@@ -277,11 +246,7 @@ void _setupBasedOnRole() {
   }
 
   Future<void> _updateProfile() async {
-    if (!_formKey.currentState!.validate() || 
-        _tableName == null || 
-        _userData == null) {
-      return;
-    }
+    if (!_formKey.currentState!.validate()) return;
 
     try {
       setState(() {
@@ -289,93 +254,28 @@ void _setupBasedOnRole() {
         _error = null;
       });
 
-      Map<String, dynamic> updateData = {
+      final idValue = _userData![_userIdField!];
+      final Map<String, dynamic> changes = {
         _firstNameField!: _firstNameController.text,
         _lastNameField!: _lastNameController.text,
-        _phoneField!: _phoneController.text,
+        if (_phoneField != null) _phoneField!: _phoneController.text,
+        if (_hasBirthdayField && _birthdayField != null && _selectedBirthday != null)
+          _birthdayField!: _selectedBirthday!.toIso8601String().split('T')[0],
+        'role': widget.userRole.capitalize(), // Ensure role is properly set
+        'is_active': true, // Ensure staff remains active
+        'updated_at': DateTime.now().toIso8601String(),
       };
 
-      // Add address field for client if applicable
-      if (_hasAddressField && _addressField != null) {
-        updateData[_addressField!] = _addressController.text;
-      }
-      
-      // Add birthday field if applicable
-      if (_hasBirthdayField && _birthdayField != null && _selectedBirthday != null) {
-        updateData[_birthdayField!] = _selectedBirthday!.toIso8601String().split('T')[0];
-      }
-      
-      // Add status field for therapist if applicable
-      if (_hasStatusField && _statusField != null && _currentStatus != null) {
-        updateData[_statusField!] = _currentStatus;
-      }
-
-      // Use the actual ID from the fetched user data for the update
-      final idValue = _userData![_userIdField!];
-      
-      print("Updating profile for $idValue with data: $updateData");
-      
       await supabase
           .from(_tableName!)
-          .update(updateData)
+          .update(changes)
           .eq(_userIdField!, idValue);
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Profile updated successfully')),
+          const SnackBar(content: Text('Profile updated successfully')),
         );
-        Navigator.pop(context, true); // Return true to indicate successful update
-      }
-    } catch (e) {
-      setState(() {
-        _error = 'Update failed: ${e.toString()}';
-        _isLoading = false;
-      });
-      print('Error updating profile: $e');
-    }
-  }
-
-  Future<void> _updateEmail() async {
-    if (!_formKey.currentState!.validate() || _tableName == null) return;
-
-    try {
-      setState(() {
-        _isLoading = true;
-        _error = null;
-      });
-
-      final currentUserEmail = supabase.auth.currentUser!.email!;
-      final newEmail = _newEmailController.text.trim();
-      final currentPassword = _currentPasswordController.text;
-
-      // First verify password
-      final AuthResponse verifyResponse = await supabase.auth.signInWithPassword(
-        email: currentUserEmail,
-        password: currentPassword,
-      );
-
-      if (verifyResponse.user == null) {
-        throw AuthException('Invalid credentials');
-      }
-
-      // Use RPC to update auth email
-      await supabase.rpc('change_user_email', params: {
-        'old_email': currentUserEmail,
-        'new_email': newEmail,
-      });
-
-      // Update the database table
-      await supabase.from(_tableName!).update({
-        'email': newEmail,
-      }).eq('email', currentUserEmail);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Email updated successfully. Please sign in with your new email.')),
-        );
-        // Sign out and redirect to login
-        await supabase.auth.signOut();
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.pop(context, true);
       }
     } catch (e) {
       setState(() {
@@ -385,7 +285,98 @@ void _setupBasedOnRole() {
     }
   }
 
-  Future<void> _updatePassword() async {
+  Future<void> _updateEmail() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    try {
+      setState(() => _isLoading = true);
+      final newEmail = _newEmailController.text.trim();
+
+      // 1. First verify current password
+      try {
+        final response = await supabase.auth.signInWithPassword(
+          email: _userEmail!,
+          password: _currentPasswordController.text,
+        );
+
+        if (response.user == null) {
+          throw 'Current password is incorrect';
+        }
+      } catch (e) {
+        print('Password verification failed: $e');
+        throw 'Current password is incorrect. Please verify and try again.';
+      }
+
+      // 2. Send OTP
+      await supabase.auth.signInWithOtp(
+        email: _userEmail!,
+        shouldCreateUser: false,
+      );
+
+      // 3. Show OTP verification dialog
+      final verified = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => OTPVerificationDialog(
+          email: _userEmail!,
+          title: 'Verify Email Change',
+          message: 'Please enter the verification code sent to $_userEmail',
+          type: OtpType.email,
+        ),
+      );
+
+      if (verified != true) return;
+
+      // 4. Update auth email
+      final authUpdateResponse = await supabase.auth.updateUser(
+        UserAttributes(email: newEmail),
+      );
+
+      if (authUpdateResponse.user == null) {
+        throw 'Failed to update email in authentication';
+      }
+
+      // 5. Update email in database
+      await supabase
+          .from(_tableName!)
+          .update({'email': newEmail})
+          .eq(_userIdField!, _userData![_userIdField!]);
+
+      // 6. Sign out and redirect to login
+      if (mounted) {
+        await supabase.auth.signOut();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Email updated. Please sign in with your new email.'),
+            duration: Duration(seconds: 8),
+          ),
+        );
+        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+      }
+    } catch (e) {
+      print('Email update error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _isEmailChangeMode = false;
+          _currentPasswordController.clear();
+          _newEmailController.clear();
+        });
+      }
+    }
+  }
+
+  // Add new method for password change with OTP
+  Future<void> _updatePasswordWithOTP() async {
     if (!_formKey.currentState!.validate()) return;
 
     if (_newPasswordController.text != _confirmPasswordController.text) {
@@ -395,35 +386,73 @@ void _setupBasedOnRole() {
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
     try {
-      await supabase.auth.updateUser(
-        UserAttributes(password: _newPasswordController.text),
+      setState(() => _isLoading = true);
+
+      // First verify current password
+      final response = await supabase.auth.signInWithPassword(
+        email: _userEmail!,
+        password: _currentPasswordController.text,
       );
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Password updated successfully!")),
+      if (response.user == null) {
+        throw Exception('Current password is incorrect');
+      }
+
+      // Request OTP using signInWithOtp instead of resetPasswordForEmail
+      await supabase.auth.signInWithOtp(
+        email: _userEmail!,
+        shouldCreateUser: false, // Important: set to false since user exists
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Verification code sent to $_userEmail")),
+      );
+
+      // Show OTP verification dialog
+      final verified = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => OTPVerificationDialog(
+          email: _userEmail!,
+          title: 'Verify Password Change',
+          message: 'Please check your email (${_userEmail}) for the verification code',
+          type: OtpType.email,  // Changed to email type for OTP
+        ),
+      );
+
+      if (verified == true) {
+        // Update password after OTP verification
+        await supabase.auth.updateUser(
+          UserAttributes(password: _newPasswordController.text),
         );
-        setState(() {
-          _isPasswordChangeMode = false;
-          _currentPasswordController.clear();
-          _newPasswordController.clear();
-          _confirmPasswordController.clear();
-        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Password updated successfully")),
+          );
+          setState(() {
+            _isPasswordChangeMode = false;
+            _currentPasswordController.clear();
+            _newPasswordController.clear();
+            _confirmPasswordController.clear();
+          });
+        }
       }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-      });
+      print("Password Update Error: $e"); // Debug log
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -453,345 +482,413 @@ void _setupBasedOnRole() {
     }
   }
 
+  // Add this validator method after other validation methods
+  String? _validateName(String? value, String fieldName) {
+    if (value == null || value.isEmpty) {
+      return 'Please enter your $fieldName';
+    }
+    // Only allow letters, spaces, and hyphens
+    if (!RegExp(r"^[a-zA-Z\s-]+$").hasMatch(value)) {
+      return '$fieldName can only contain letters, spaces, and hyphens';
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Edit Profile'),
+        elevation: 0,
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(_error!, 
-                          style: TextStyle(color: Colors.red),
-                          textAlign: TextAlign.center,
-                        ),
-                        SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: _fetchUserData,
-                          child: Text('Retry'),
-                        )
-                      ],
+              ? _buildErrorView()
+              : Column(
+                  children: [
+                    _buildTabBar(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.all(16),
+                        child: _buildForm(),
+                      ),
                     ),
-                  )
-                )
-              : SingleChildScrollView(
-                  padding: EdgeInsets.all(16.0),
-                  child: Form(
-                    key: _formKey,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Profile section header
-                        Text(
-                          'Edit Your Profile',
-                          style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                        ),
-                        SizedBox(height: 20),
-
-                        // Toggle buttons for different sections
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            ElevatedButton(
-                              onPressed: () => setState(() {
-                                _isEmailChangeMode = false;
-                                _isPasswordChangeMode = false;
-                              }),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: (!_isEmailChangeMode && !_isPasswordChangeMode) 
-                                  ? Theme.of(context).primaryColor 
-                                  : Colors.grey,
-                              ),
-                              child: Text('Profile Info'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => setState(() {
-                                _isEmailChangeMode = true;
-                                _isPasswordChangeMode = false;
-                              }),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _isEmailChangeMode 
-                                  ? Theme.of(context).primaryColor 
-                                  : Colors.grey,
-                              ),
-                              child: Text('Change Email'),
-                            ),
-                            ElevatedButton(
-                              onPressed: () => setState(() {
-                                _isEmailChangeMode = false;
-                                _isPasswordChangeMode = true;
-                              }),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: _isPasswordChangeMode 
-                                  ? Theme.of(context).primaryColor 
-                                  : Colors.grey,
-                              ),
-                              child: Text('Change Password'),
-                            ),
-                          ],
-                        ),
-                        SizedBox(height: 20),
-
-                        // Show different forms based on mode
-                        if (!_isEmailChangeMode && !_isPasswordChangeMode) ...[
-                          // Original profile edit form fields
-                          TextFormField(
-                            controller: _firstNameController,
-                            decoration: InputDecoration(
-                              labelText: 'First Name',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.person),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your first name';
-                              }
-                              return null;
-                            },
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _lastNameController,
-                            decoration: InputDecoration(
-                              labelText: 'Last Name',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.person),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your last name';
-                              }
-                              return null;
-                            },
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _phoneController,
-                            decoration: InputDecoration(
-                              labelText: 'Phone Number',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.phone),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter your phone number';
-                              }
-                              return null;
-                            },
-                          ),
-                          if (_hasAddressField) ...[
-                            SizedBox(height: 16),
-                            TextFormField(
-                              controller: _addressController,
-                              decoration: InputDecoration(
-                                labelText: 'Address',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.home),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter your address';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
-                          if (_hasBirthdayField) ...[
-                            SizedBox(height: 16),
-                            GestureDetector(
-                              onTap: _pickDate,
-                              child: AbsorbPointer(
-                                child: TextFormField(
-                                  controller: _birthdayController,
-                                  decoration: InputDecoration(
-                                    labelText: 'Birthday',
-                                    hintText: 'YYYY-MM-DD',
-                                    border: OutlineInputBorder(),
-                                    prefixIcon: Icon(Icons.cake),
-                                    suffixIcon: Icon(Icons.calendar_today),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                          if (_hasStatusField && _currentStatus != null) ...[
-                            SizedBox(height: 16),
-                            DropdownButtonFormField<String>(
-                              value: _currentStatus,
-                              decoration: InputDecoration(
-                                labelText: 'Status',
-                                border: OutlineInputBorder(),
-                                prefixIcon: Icon(Icons.circle, color: _getStatusColor(_currentStatus!)),
-                              ),
-                              items: _statusOptions.map((String status) {
-                                return DropdownMenuItem<String>(
-                                  value: status,
-                                  child: Row(
-                                    children: [
-                                      Container(
-                                        width: 12,
-                                        height: 12,
-                                        decoration: BoxDecoration(
-                                          color: _getStatusColor(status),
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      SizedBox(width: 8),
-                                      Text(status),
-                                    ],
-                                  ),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                if (newValue != null) {
-                                  setState(() {
-                                    _currentStatus = newValue;
-                                  });
-                                }
-                              },
-                            ),
-                          ],
-                          SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: _updateProfile,
-                              child: Text('Save Changes', style: TextStyle(fontSize: 16)),
-                            ),
-                          ),
-                        ],
-
-                        if (_isEmailChangeMode) ...[
-                          TextFormField(
-                            controller: _newEmailController,
-                            decoration: InputDecoration(
-                              labelText: 'New Email',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.email),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter new email';
-                              }
-                              if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                                return 'Please enter a valid email';
-                              }
-                              return null;
-                            },
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _currentPasswordController,
-                            decoration: InputDecoration(
-                              labelText: 'Current Password',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.lock),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
-                                ),
-                                onPressed: () => setState(() {
-                                  _showCurrentPassword = !_showCurrentPassword;
-                                }),
-                              ),
-                            ),
-                            obscureText: !_showCurrentPassword,
-                            validator: (value) => value!.isEmpty ? 'Please enter current password' : null,
-                          ),
-                          SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: _updateEmail,
-                              child: Text('Update Email', style: TextStyle(fontSize: 16)),
-                            ),
-                          ),
-                        ],
-
-                        if (_isPasswordChangeMode) ...[
-                          TextFormField(
-                            controller: _currentPasswordController,
-                            decoration: InputDecoration(
-                              labelText: 'Current Password',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.lock),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
-                                ),
-                                onPressed: () => setState(() {
-                                  _showCurrentPassword = !_showCurrentPassword;
-                                }),
-                              ),
-                            ),
-                            obscureText: !_showCurrentPassword,
-                            validator: (value) => value!.isEmpty ? 'Please enter current password' : null,
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _newPasswordController,
-                            decoration: InputDecoration(
-                              labelText: 'New Password',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.lock_outline),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _showNewPassword ? Icons.visibility : Icons.visibility_off,
-                                ),
-                                onPressed: () => setState(() {
-                                  _showNewPassword = !_showNewPassword;
-                                }),
-                              ),
-                            ),
-                            obscureText: !_showNewPassword,
-                            validator: (value) => value!.length < 6 
-                              ? 'Password must be at least 6 characters' 
-                              : null,
-                          ),
-                          SizedBox(height: 16),
-                          TextFormField(
-                            controller: _confirmPasswordController,
-                            decoration: InputDecoration(
-                              labelText: 'Confirm New Password',
-                              border: OutlineInputBorder(),
-                              prefixIcon: Icon(Icons.lock_outline),
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _showConfirmPassword ? Icons.visibility : Icons.visibility_off,
-                                ),
-                                onPressed: () => setState(() {
-                                  _showConfirmPassword = !_showConfirmPassword;
-                                }),
-                              ),
-                            ),
-                            obscureText: !_showConfirmPassword,
-                            validator: (value) => value != _newPasswordController.text 
-                              ? 'Passwords do not match' 
-                              : null,
-                          ),
-                          SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: ElevatedButton(
-                              onPressed: _updatePassword,
-                              child: Text('Update Password', style: TextStyle(fontSize: 16)),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                  ],
                 ),
     );
   }
+
+  Widget _buildTabBar() {
+    return Container(
+      color: Theme.of(context).primaryColor,
+      child: Column(
+        children: [
+          Padding(
+            padding: EdgeInsets.all(16),
+            child: Row(
+              children: [
+                _buildTab(
+                  title: 'Profile',
+                  icon: Icons.person,
+                  isSelected: !_isEmailChangeMode && !_isPasswordChangeMode,
+                  onTap: () => setState(() {
+                    _isEmailChangeMode = false;
+                    _isPasswordChangeMode = false;
+                  }),
+                ),
+                _buildTab(
+                  title: 'Email',
+                  icon: Icons.email,
+                  isSelected: _isEmailChangeMode,
+                  onTap: () => setState(() {
+                    _isEmailChangeMode = true;
+                    _isPasswordChangeMode = false;
+                  }),
+                ),
+                _buildTab(
+                  title: 'Password',
+                  icon: Icons.lock,
+                  isSelected: _isPasswordChangeMode,
+                  onTap: () => setState(() {
+                    _isEmailChangeMode = false;
+                    _isPasswordChangeMode = true;
+                  }),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            height: 2,
+            color: Colors.white.withOpacity(0.1),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTab({
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: isSelected ? Colors.white : Colors.transparent,
+                width: 2,
+              ),
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(icon, color: Colors.white),
+              SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(_error!, 
+              style: TextStyle(color: Colors.red),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _fetchUserData,
+              child: Text('Retry'),
+            )
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForm() {
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Profile section header
+          Text(
+            'Edit Your Profile',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          SizedBox(height: 20),
+
+          // Show different forms based on mode
+          if (!_isEmailChangeMode && !_isPasswordChangeMode) ...[
+            // Original profile edit form fields
+            TextFormField(
+              controller: _firstNameController,
+              decoration: InputDecoration(
+                labelText: 'First Name',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
+                helperText: 'Only letters, spaces, and hyphens allowed',
+              ),
+              validator: (value) => _validateName(value, 'first name'),
+            ),
+            SizedBox(height: 16),
+            TextFormField(
+              controller: _lastNameController,
+              decoration: InputDecoration(
+                labelText: 'Last Name',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.person),
+                helperText: 'Only letters, spaces, and hyphens allowed',
+              ),
+              validator: (value) => _validateName(value, 'last name'),
+            ),
+            SizedBox(height: 16),
+            TextFormField(
+              controller: _phoneController,
+              decoration: InputDecoration(
+                labelText: 'Phone Number',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.phone),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter your phone number';
+                }
+                return null;
+              },
+            ),
+            if (_hasAddressField) ...[
+              SizedBox(height: 16),
+              TextFormField(
+                controller: _addressController,
+                decoration: InputDecoration(
+                  labelText: 'Address',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.home),
+                ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your address';
+                  }
+                  return null;
+                },
+              ),
+            ],
+            if (_hasBirthdayField) ...[
+              SizedBox(height: 16),
+              GestureDetector(
+                onTap: _pickDate,
+                child: AbsorbPointer(
+                  child: TextFormField(
+                    controller: _birthdayController,
+                    decoration: InputDecoration(
+                      labelText: 'Birthday',
+                      hintText: 'YYYY-MM-DD',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.cake),
+                      suffixIcon: Icon(Icons.calendar_today),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            if (_hasStatusField && _currentStatus != null) ...[
+              SizedBox(height: 16),
+              DropdownButtonFormField<String>(
+                value: _currentStatus,
+                decoration: InputDecoration(
+                  labelText: 'Status',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.circle, color: _getStatusColor(_currentStatus!)),
+                ),
+                items: _statusOptions.map((String status) {
+                  return DropdownMenuItem<String>(
+                    value: status,
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 12,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: _getStatusColor(status),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        SizedBox(width: 8),
+                        Text(status),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                onChanged: (String? newValue) {
+                  if (newValue != null) {
+                    setState(() {
+                      _currentStatus = newValue;
+                    });
+                  }
+                },
+              ),
+            ],
+            SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _updateProfile,
+                child: Text('Save Changes', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+
+          if (_isEmailChangeMode) ...[
+            TextFormField(
+              controller: _newEmailController,
+              decoration: InputDecoration(
+                labelText: 'New Email',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.email),
+              ),
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please enter new email';
+                }
+                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                  return 'Please enter a valid email';
+                }
+                return null;
+              },
+            ),
+            SizedBox(height: 16),
+            TextFormField(
+              controller: _currentPasswordController,
+              decoration: InputDecoration(
+                labelText: 'Current Password',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() {
+                    _showCurrentPassword = !_showCurrentPassword;
+                  }),
+                ),
+              ),
+              obscureText: !_showCurrentPassword,
+              validator: (value) => value!.isEmpty ? 'Please enter current password' : null,
+            ),
+            SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _updateEmail,
+                child: Text('Update Email', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+
+          if (_isPasswordChangeMode) ...[
+            TextFormField(
+              controller: _currentPasswordController,
+              decoration: InputDecoration(
+                labelText: 'Current Password',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() {
+                    _showCurrentPassword = !_showCurrentPassword;
+                  }),
+                ),
+              ),
+              obscureText: !_showCurrentPassword,
+              validator: (value) => value!.isEmpty ? 'Please enter current password' : null,
+            ),
+            SizedBox(height: 16),
+            TextFormField(
+              controller: _newPasswordController,
+              decoration: InputDecoration(
+                labelText: 'New Password',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _showNewPassword ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() {
+                    _showNewPassword = !_showNewPassword;
+                  }),
+                ),
+              ),
+              obscureText: !_showNewPassword,
+              validator: (value) => value!.length < 6 
+                ? 'Password must be at least 6 characters' 
+                : null,
+            ),
+            SizedBox(height: 16),
+            TextFormField(
+              controller: _confirmPasswordController,
+              decoration: InputDecoration(
+                labelText: 'Confirm New Password',
+                border: OutlineInputBorder(),
+                prefixIcon: Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _showConfirmPassword ? Icons.visibility : Icons.visibility_off,
+                  ),
+                  onPressed: () => setState(() {
+                    _showConfirmPassword = !_showConfirmPassword;
+                  }),
+                ),
+              ),
+              obscureText: !_showConfirmPassword,
+              validator: (value) => value != _newPasswordController.text 
+                ? 'Passwords do not match' 
+                : null,
+            ),
+            SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _updatePasswordWithOTP, // Change this line
+                child: Text('Update Password', style: TextStyle(fontSize: 16)),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Add this extension to capitalize the role
+extension StringExtension on String {
+    String capitalize() {
+        return "${this[0].toUpperCase()}${this.substring(1)}";
+    }
 }

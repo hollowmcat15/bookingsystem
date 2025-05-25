@@ -31,12 +31,12 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
   }
 
   Future<void> _loadTherapistData() async {
-     try {
-      final int therapistId = widget.therapistData['therapist_id'];
+    try {
+      final int staffId = widget.therapistData['therapist_id']; // This is actually staff_id
       final response = await supabase
-          .from('therapist')
+          .from('staff')
           .select('status')
-          .eq('therapist_id', therapistId)
+          .eq('staff_id', staffId)
           .single();
 
       if (mounted) {
@@ -46,7 +46,7 @@ class _TherapistDashboardState extends State<TherapistDashboard> {
       }
     } catch (e) {
       print("Error loading therapist status: $e");
-       if (mounted) {
+      if (mounted) {
         setState(() {
           _currentStatus = widget.therapistData['status'] ?? 'Active';
         });
@@ -489,30 +489,34 @@ int _getStatusPriority(String? status) {
 
   Future<void> _updateStatus(String newStatus) async {
     try {
-      final int therapistId = widget.therapistData['therapist_id'];
-      await supabase.from('therapist').update({'status': newStatus}).eq('therapist_id', therapistId);
+      final int staffId = widget.therapistData['therapist_id']; // This is actually staff_id
+      await supabase
+          .from('staff')
+          .update({'status': newStatus})
+          .eq('staff_id', staffId);
+
       if (mounted) {
-        setState(() { 
-          _currentStatus = newStatus; 
-          widget.therapistData['status'] = newStatus; 
+        setState(() {
+          _currentStatus = newStatus;
+          widget.therapistData['status'] = newStatus;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Status updated to $newStatus'), 
-            backgroundColor: Colors.green, 
+            content: Text('Status updated to $newStatus'),
+            backgroundColor: Colors.green,
             duration: Duration(seconds: 2)
           )
         );
       }
     } catch (e) {
       print("Error updating status: $e");
-      if (mounted) { 
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Error updating status: ${e.toString()}'), 
+            content: Text('Error updating status: ${e.toString()}'),
             backgroundColor: Colors.red
           )
-        ); 
+        );
       }
     }
   }

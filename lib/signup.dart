@@ -18,111 +18,143 @@ class _SignUpPageState extends State<SignUpPage> {
   final TextEditingController _addressController = TextEditingController();
   DateTime? _selectedBirthday;
   bool _isPasswordVisible = false;
+  bool _isLoading = false;
 
   final SupabaseClient supabase = Supabase.instance.client;
 
-  // Add validation functions
+  // Update name validation
   String? _validateName(String? value, String fieldName) {
     if (value == null || value.isEmpty) {
       return '$fieldName is required';
     }
-    // Regex to check for letters only (including spaces and dashes for compound names)
-    if (!RegExp(r'^[a-zA-Z\s-]+$').hasMatch(value)) {
-      return '$fieldName can only contain letters';
+    // Only allow letters, spaces, and hyphens
+    if (!RegExp(r"^[a-zA-Z\s-]+$").hasMatch(value)) {
+      return '$fieldName can only contain letters, spaces, and hyphens';
     }
     return null;
   }
 
-  // Add validation function for birthday
+  // Add phone validation
+  String? _validatePhone(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Phone number is required';
+    }
+    if (value.length != 11) {
+      return 'Phone number must be exactly 11 digits';
+    }
+    if (!RegExp(r'^\d{11}$').hasMatch(value)) {
+      return 'Please enter valid phone number';
+    }
+    return null;
+  }
+
+  // Update birthday validation
   String? _validateBirthday(DateTime? date) {
     if (date == null) {
       return 'Birthday is required';
     }
-    if (date.year >= DateTime.now().year) {
-      return 'Invalid birth year';
+    final now = DateTime.now();
+    if (date.year >= now.year) {
+      return 'Please select a valid birth year';
+    }
+    // Optional: Add minimum age requirement
+    if (now.year - date.year < 13) {
+      return 'You must be at least 13 years old';
     }
     return null;
   }
 
-  /// ✅ Sends OTP via Email and Navigates to OTP Screen
+  // Add password validation method after other validation methods
+  String? _validatePassword(String? value) {
+    if (value == null || value.isEmpty) {
+      return 'Password is required';
+    }
+    if (value.length < 8) {
+      return 'Password must be at least 8 characters long';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(value)) {
+      return 'Password must contain at least one uppercase letter';
+    }
+    if (!RegExp(r'[a-z]').hasMatch(value)) {
+      return 'Password must contain at least one lowercase letter';
+    }
+    if (!RegExp(r'[0-9]').hasMatch(value)) {
+      return 'Password must contain at least one number';
+    }
+    if (!RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(value)) {
+      return 'Password must contain at least one special character';
+    }
+    return null;
+  }
+
+  /// Update OTP handling
   Future<void> _sendEmailOTP() async {
+    if (!_formKey.currentState!.validate()) return;
+
     String? birthdayError = _validateBirthday(_selectedBirthday);
     if (birthdayError != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(birthdayError),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-        ),
+        SnackBar(content: Text(birthdayError), backgroundColor: Colors.red),
       );
       return;
     }
 
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    // Show loading indicator
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => Center(
-        child: CircularProgressIndicator(),
-      ),
-    );
+    setState(() => _isLoading = true);
 
     try {
-      await supabase.auth.signUp(
+      // Create auth user with OTP
+      final AuthResponse res = await supabase.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text,
+        emailRedirectTo: 'io.supabase.flutterquickstart://login-callback/',
+        data: {
+          'first_name': _firstNameController.text,
+          'last_name': _lastNameController.text,
+          'phone': _phoneController.text,
+          'address': _addressController.text,
+          'birthday': _selectedBirthday?.toIso8601String(),
+          'role': 'client'
+        },
       );
 
-      // Close loading dialog
-      Navigator.pop(context);
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("OTP sent to ${_emailController.text}. Check your email."),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-
-      // ✅ Navigate to OTP Verification Screen
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OTPVerificationPage(
-            email: _emailController.text.trim(),
-            firstName: _firstNameController.text.trim(),
-            lastName: _lastNameController.text.trim(),
-            phone: _phoneController.text.trim(),
-            address: _addressController.text.trim(),
-            birthday: _selectedBirthday,
-          ),
-        ),
-      );
+      if (res.user != null) {
+        // Navigate to OTP verification
+        if (mounted) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => OTPVerificationPage(
+                email: _emailController.text.trim(),
+                firstName: _firstNameController.text.trim(),
+                lastName: _lastNameController.text.trim(),
+                phone: _phoneController.text.trim(),
+                address: _addressController.text.trim(),
+                birthday: _selectedBirthday,
+              ),
+            ),
+          );
+        }
+      }
     } catch (e) {
-      // Close loading dialog
-      Navigator.pop(context);
-      
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("Failed to send OTP: $e"),
+          content: Text('Error: ${e.toString()}'),
           backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
         ),
       );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  /// Modified date picker to prevent selecting current year
+  /// Modified date picker to prevent current year
   void _pickBirthday() async {
+    final currentYear = DateTime.now().year;
     DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime(DateTime.now().year - 18),  // Set default to 18 years ago
+      initialDate: DateTime(currentYear - 18), // Set default to 18 years ago
       firstDate: DateTime(1900),
-      lastDate: DateTime(DateTime.now().year - 1),  // Prevent selecting current year
+      lastDate: DateTime(currentYear - 1), // Prevent selecting current year
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -146,275 +178,187 @@ class _SignUpPageState extends State<SignUpPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back, color: Colors.blue),
+          onPressed: () => Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => LoginPage()),
+          ),
+        ),
+      ),
       body: SafeArea(
-        child: Stack(
-          children: [
-            // Back button at the top left
-            Positioned(
-              top: 16,
-              left: 16,
-              child: IconButton(
-                icon: Icon(Icons.arrow_back, color: Colors.blue),
-                onPressed: () => Navigator.pushReplacement(
-                  context,
-                  MaterialPageRoute(builder: (context) => LoginPage()),
-                ),
-              ),
-            ),
-            
-            SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(24.0, 60.0, 24.0, 24.0),
-              child: Form( // Wrap Column with Form widget
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: <Widget>[
-                    SizedBox(height: 10),
-                    // Logo and app name
-                    Container(
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: Colors.blue.withOpacity(0.1),
-                      ),
-                      padding: EdgeInsets.all(20),
-                      child: Icon(Icons.person_add, size: 60, color: Colors.blue),
-                    ),
-                    SizedBox(height: 20),
-                    Text(
-                      "Create an Account",
-                      style: TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade800,
-                      ),
-                    ),
-                    Text(
-                      "Please fill in your details",
-                      style: TextStyle(
-                        fontSize: 16,
-                        color: Colors.grey.shade600,
-                      ),
-                    ),
-                    SizedBox(height: 30),
-
-                    /// ✅ First Name & Last Name Fields with validation
-                    Row(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24.0),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Expanded(
-                          child: TextFormField( // Changed from TextField
-                            controller: _firstNameController,
-                            validator: (value) => _validateName(value, 'First name'),
-                            decoration: InputDecoration(
-                              labelText: "First Name",
-                              prefixIcon: Icon(Icons.person_outline),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: Colors.blue, width: 2),
-                              ),
-                              errorStyle: TextStyle(height: 0.8),
-                            ),
+                        // Header section - make it more compact
+                        Icon(Icons.person_add, size: 48, color: Colors.blue),
+                        SizedBox(height: 8),
+                        Text(
+                          "Create Account",
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue.shade800,
                           ),
                         ),
-                        SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField( // Changed from TextField
-                            controller: _lastNameController,
-                            validator: (value) => _validateName(value, 'Last name'),
+                        SizedBox(height: 16),
+
+                        // Form fields with reduced spacing
+                        Row(
+                          children: [
+                            Expanded(
+                              child: TextFormField(
+                                controller: _firstNameController,
+                                validator: (value) => _validateName(value, 'First name'),
+                                decoration: InputDecoration(
+                                  labelText: "First Name",
+                                  prefixIcon: Icon(Icons.person_outline, size: 20),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                              ),
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: TextFormField(
+                                controller: _lastNameController,
+                                validator: (value) => _validateName(value, 'Last name'),
+                                decoration: InputDecoration(
+                                  labelText: "Last Name",
+                                  prefixIcon: Icon(Icons.person_outline, size: 20),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(height: 12),
+
+                        TextFormField(
+                          controller: _emailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            labelText: "Email",
+                            prefixIcon: Icon(Icons.email_outlined, size: 20),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                        SizedBox(height: 12),
+
+                        TextFormField(
+                          controller: _passwordController,
+                          obscureText: !_isPasswordVisible,
+                          validator: _validatePassword,
+                          decoration: InputDecoration(
+                            labelText: "Password",
+                            prefixIcon: Icon(Icons.lock_outline, size: 20),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                                size: 20,
+                              ),
+                              onPressed: () => setState(() => _isPasswordVisible = !_isPasswordVisible),
+                            ),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            helperText: 'Password must contain:\n'
+                                '• At least 8 characters\n'
+                                '• One uppercase letter\n'
+                                '• One lowercase letter\n'
+                                '• One number\n'
+                                '• One special character',
+                            helperMaxLines: 6,
+                            errorMaxLines: 2,
+                          ),
+                        ),
+                        SizedBox(height: 12),
+
+                        TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          maxLength: 11,
+                          validator: _validatePhone,
+                          decoration: InputDecoration(
+                            labelText: "Phone",
+                            prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                            counterText: '',
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                        SizedBox(height: 12),
+
+                        TextFormField(
+                          controller: _addressController,
+                          decoration: InputDecoration(
+                            labelText: "Address",
+                            prefixIcon: Icon(Icons.home_outlined, size: 20),
+                            contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                        ),
+                        SizedBox(height: 12),
+
+                        // Birthday field
+                        InkWell(
+                          onTap: _pickBirthday,
+                          child: InputDecorator(
                             decoration: InputDecoration(
-                              labelText: "Last Name",
-                              prefixIcon: Icon(Icons.person_outline),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(color: Colors.blue, width: 2),
-                              ),
-                              errorStyle: TextStyle(height: 0.8),
+                              labelText: "Birthday",
+                              prefixIcon: Icon(Icons.calendar_today, size: 20),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            child: Text(
+                              _selectedBirthday == null
+                                  ? "Select Birthday"
+                                  : "${_selectedBirthday!.toLocal()}".split(" ")[0],
                             ),
                           ),
                         ),
                       ],
                     ),
-                    SizedBox(height: 16),
-
-                    /// ✅ Email
-                    TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        labelText: "Email",
-                        prefixIcon: Icon(Icons.email_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.blue, width: 2),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-
-                    /// ✅ Password
-                    TextFormField(
-                      controller: _passwordController,
-                      obscureText: !_isPasswordVisible,
-                      decoration: InputDecoration(
-                        labelText: "Password",
-                        prefixIcon: Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _isPasswordVisible ? Icons.visibility : Icons.visibility_off,
+                  ),
+                ),
+                // Fixed bottom section
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 16.0),
+                  child: Column(
+                    children: [
+                      ElevatedButton(
+                        onPressed: _sendEmailOTP,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: Size(double.infinity, 45),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          onPressed: () {
-                            setState(() {
-                              _isPasswordVisible = !_isPasswordVisible;
-                            });
-                          },
                         ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.blue, width: 2),
-                        ),
+                        child: Text("Sign Up"),
                       ),
-                    ),
-                    SizedBox(height: 16),
-
-                    /// ✅ Phone Number
-                    TextFormField(
-                      controller: _phoneController,
-                      keyboardType: TextInputType.phone,
-                      decoration: InputDecoration(
-                        labelText: "Phone Number",
-                        prefixIcon: Icon(Icons.phone_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.blue, width: 2),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-
-                    /// ✅ Address
-                    TextFormField(
-                      controller: _addressController,
-                      decoration: InputDecoration(
-                        labelText: "Address",
-                        prefixIcon: Icon(Icons.home_outlined),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: Colors.blue, width: 2),
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-
-                    /// ✅ Birthday Field with improved UI
-                    GestureDetector(
-                      onTap: _pickBirthday,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Container(
-                            decoration: BoxDecoration(
-                              border: Border.all(
-                                color: _validateBirthday(_selectedBirthday) != null 
-                                  ? Colors.red 
-                                  : Colors.grey
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: ListTile(
-                              leading: Icon(Icons.calendar_today, 
-                                color: _validateBirthday(_selectedBirthday) != null 
-                                  ? Colors.red 
-                                  : Colors.blue
-                              ),
-                              title: Text(
-                                _selectedBirthday == null
-                                    ? "Select Birthday"
-                                    : "${_selectedBirthday!.toLocal()}".split(" ")[0],
-                                style: TextStyle(
-                                  color: _selectedBirthday == null ? Colors.grey.shade600 : Colors.black,
-                                ),
-                              ),
-                              trailing: Icon(Icons.arrow_drop_down),
-                            ),
+                          Text("Already have an account? "),
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: Text("Log in"),
+                            style: TextButton.styleFrom(padding: EdgeInsets.zero),
                           ),
-                          if (_validateBirthday(_selectedBirthday) != null)
-                            Padding(
-                              padding: const EdgeInsets.only(left: 12, top: 8),
-                              child: Text(
-                                _validateBirthday(_selectedBirthday)!,
-                                style: TextStyle(
-                                  color: Colors.red,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
-                    ),
-                    SizedBox(height: 30),
-
-                    /// ✅ Sign Up Button
-                    ElevatedButton(
-                      onPressed: _sendEmailOTP,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.symmetric(vertical: 15),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        minimumSize: Size(double.infinity, 50),
-                        elevation: 2,
-                      ),
-                      child: Text(
-                        "Sign Up",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    SizedBox(height: 16),
-
-                    // Text with link to login page
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          "Already have an account? ",
-                          style: TextStyle(color: Colors.grey.shade600),
-                        ),
-                        GestureDetector(
-                          onTap: () => Navigator.pop(context),
-                          child: Text(
-                            "Log in",
-                            style: TextStyle(
-                              color: Colors.blue,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

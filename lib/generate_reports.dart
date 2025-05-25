@@ -47,11 +47,13 @@ class _GenerateReportsState extends State<GenerateReports> {
 
   Future<void> _fetchInitialData() async {
     try {
-      // Fetch therapists for this spa
+      // Update to use staff table instead of therapist
       final therapistsResponse = await supabase
-          .from('therapist')
-          .select('therapist_id, first_name, last_name')
-          .eq('spa_id', widget.spaId);
+          .from('staff')
+          .select('staff_id, first_name, last_name')
+          .eq('spa_id', widget.spaId)
+          .eq('role', 'Therapist')
+          .eq('is_active', true);
       
       // Fetch services for this spa
       final servicesResponse = await supabase
@@ -59,12 +61,16 @@ class _GenerateReportsState extends State<GenerateReports> {
           .select('service_id, service_name')
           .eq('spa_id', widget.spaId);
 
-      setState(() {
-        _therapists = therapistsResponse;
-        _services = servicesResponse;
-      });
+      if (mounted) {
+        setState(() {
+          _therapists = therapistsResponse;
+          _services = servicesResponse;
+        });
+      }
     } catch (e) {
-      setState(() => _error = e.toString());
+      if (mounted) {
+        setState(() => _error = e.toString());
+      }
     }
   }
 
@@ -297,12 +303,15 @@ class _GenerateReportsState extends State<GenerateReports> {
   }
 
   Future<Map<String, dynamic>> _generateTherapistReport(String startDate, String endDate) async {
-    print('Generating services report for: $startDate to $endDate'); // Debug print
-    
     final response = await supabase
         .from('appointment')
         .select('''
           *,
+          staff:therapist_id (
+            first_name, 
+            last_name,
+            commission_percentage
+          ),
           service:service_id (
             service_name,
             service_price
@@ -313,8 +322,6 @@ class _GenerateReportsState extends State<GenerateReports> {
         .gte('booking_date', startDate)
         .lte('booking_date', endDate);
 
-    print('Services report response: $response'); // Debug print
-    
     return {
       'appointments': response,
     };
@@ -587,7 +594,7 @@ class _GenerateReportsState extends State<GenerateReports> {
                             child: Text('All Therapists'),
                           ),
                           ..._therapists.map((therapist) => DropdownMenuItem(
-                            value: therapist['therapist_id'],
+                            value: therapist['staff_id'],
                             child: Text('${therapist['first_name']} ${therapist['last_name']}'),
                           )),
                         ],
@@ -680,7 +687,7 @@ class _GenerateReportsState extends State<GenerateReports> {
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
-                  height: 200,
+                  height: 250,
                   child: _salesData.isEmpty
                       ? const Center(child: Text('No data available'))
                       : BarChart(
@@ -819,7 +826,7 @@ class _GenerateReportsState extends State<GenerateReports> {
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
-                  height: 200,
+                  height: 250,
                   child: _servicesData.isEmpty
                       ? const Center(child: Text('No data available'))
                       : PieChart(
@@ -914,9 +921,15 @@ class _GenerateReportsState extends State<GenerateReports> {
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    
     return Scaffold(
       appBar: AppBar(
         title: const Text('Generate Reports'),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: _showGenerateReportDialog,
+        child: const Icon(Icons.add),
       ),
       body: _isLoading && _reports.isEmpty
           ? const Center(child: CircularProgressIndicator())
@@ -924,114 +937,177 @@ class _GenerateReportsState extends State<GenerateReports> {
               ? Center(child: Text('Error: $_error'))
               : Padding(
                   padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Reports',
-                            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                          ),
-                          ElevatedButton.icon(
-                            onPressed: _showGenerateReportDialog,
-                            icon: const Icon(Icons.add),
-                            label: const Text('Generate Report'),
-                          ),
-                        ],
+                  child: isMobile ? _buildMobileLayout() : _buildDesktopLayout(),
+                ),
+    );
+  }
+
+  Widget _buildMobileLayout() {
+    if (_reports.isEmpty && _currentReport == null) {
+      return _buildEmptyState();
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            itemCount: _reports.length,
+            itemBuilder: (context, index) {
+              final report = _reports[index];
+              final isSelected = _currentReport != null && 
+                              _currentReport!['id'] == report['id'];
+              
+              return Card(
+                margin: EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                child: Column(
+                  children: [
+                    ListTile(
+                      leading: Icon(
+                        report['type'] == 'appointment' 
+                            ? Icons.bar_chart
+                            : (report['type'] == 'therapist' ? Icons.person : Icons.monetization_on),
+                        color: Theme.of(context).primaryColor,
                       ),
-                      const SizedBox(height: 16),
-                      _reports.isEmpty && _currentReport == null
-                          ? Card(
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(32),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Icon(Icons.bar_chart, size: 64, color: Colors.grey),
-                                    const SizedBox(height: 16),
-                                    const Text(
-                                      'No reports available.',
-                                      style: TextStyle(fontSize: 18, color: Colors.grey),
-                                    ),
-                                    const SizedBox(height: 16),
-                                    ElevatedButton(
-                                      onPressed: _showGenerateReportDialog,
-                                      child: const Text('Generate Your First Report'),
-                                    ),
-                                  ],
+                      title: Text(report['title']),
+                      subtitle: Text(
+                        '${report['date_range']}\nBooking Date: ${report['booking_date']}',
+                      ),
+                      isThreeLine: true,
+                      onTap: () {
+                        if (!isSelected) {
+                          _viewReport(report);
+                        }
+                      },
+                    ),
+                    if (isSelected) 
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: _currentReport!['type'] == 'sales'
+                            ? _buildSalesReport()
+                            : _buildServicesReport(),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDesktopLayout() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header and Generate Button
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Reports',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            ElevatedButton.icon(
+              onPressed: _showGenerateReportDialog,
+              icon: const Icon(Icons.add),
+              label: const Text('Generate Report'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // Main Content Area
+        Expanded(
+          child: _reports.isEmpty && _currentReport == null
+              ? _buildEmptyState()
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Reports List
+                    Expanded(
+                      flex: 1,
+                      child: Card(
+                        child: ListView.separated(
+                          itemCount: _reports.length,
+                          separatorBuilder: (context, index) => const Divider(),
+                          itemBuilder: (context, index) {
+                            final report = _reports[index];
+                            return ListTile(
+                              leading: Icon(
+                                report['type'] == 'appointment' 
+                                    ? Icons.bar_chart
+                                    : Icons.monetization_on,
+                                color: Theme.of(context).primaryColor,
+                              ),
+                              title: Text(report['title']),
+                              subtitle: Text(
+                                '${report['date_range']}\nBooking Date: ${report['booking_date']}',
+                              ),
+                              isThreeLine: true,
+                              selected: _currentReport != null &&
+                                  _currentReport!['id'] == report['id'],
+                              onTap: () => _viewReport(report),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 16),
+
+                    // Report Details
+                    if (_currentReport != null)
+                      Expanded(
+                        flex: 2,
+                        child: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _currentReport!['title'],
+                                style: const TextStyle(
+                                  fontSize: 18, 
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
-                            )
-                          : Expanded(
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // Reports list
-                                  Expanded(
-                                    flex: 1,
-                                    child: Card(
-                                      child: ListView.separated(
-                                        itemCount: _reports.length,
-                                        separatorBuilder: (context, index) => const Divider(),
-                                        itemBuilder: (context, index) {
-                                          final report = _reports[index];
-                                          return ListTile(
-                                            leading: Icon(
-                                              report['type'] == 'appointment' 
-                                                  ? Icons.bar_chart
-                                                  : (report['type'] == 'therapist' ? Icons.person : Icons.monetization_on),
-                                              color: Theme.of(context).primaryColor,
-                                            ),
-                                            title: Text(report['title']),
-                                            subtitle: Text(
-                                              '${report['date_range']}\nBooking Date: ${report['booking_date']}',
-                                            ),
-                                            isThreeLine: true,
-                                            selected: _currentReport != null &&
-                                                _currentReport!['id'] == report['id'],
-                                            onTap: () => _viewReport(report),
-                                          );
-                                        },
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 16),
-                                  // Report display
-                                  if (_currentReport != null)
-                                    Expanded(
-                                      flex: 2,
-                                      child: SingleChildScrollView(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              _currentReport!['title'],
-                                              style: const TextStyle(
-                                                fontSize: 18, 
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            Text(
-                                              'Date Range: ${_currentReport!['date_range']}',
-                                              style: const TextStyle(color: Colors.grey),
-                                            ),
-                                            const SizedBox(height: 16),
-                                            _currentReport!['type'] == 'sales'
-                                                ? _buildSalesReport()
-                                                : _buildServicesReport(),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                ],
+                              Text(
+                                'Date Range: ${_currentReport!['date_range']}',
+                                style: const TextStyle(color: Colors.grey),
                               ),
-                            ),
-                    ],
-                  ),
+                              const SizedBox(height: 16),
+                              _currentReport!['type'] == 'sales'
+                                  ? _buildSalesReport()
+                                  : _buildServicesReport(),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.bar_chart, size: 64, color: Colors.grey),
+          const SizedBox(height: 16),
+          const Text(
+            'No reports available.',
+            style: TextStyle(fontSize: 18, color: Colors.grey),
+          ),
+          const SizedBox(height: 16),
+          ElevatedButton(
+            onPressed: _showGenerateReportDialog,
+            child: const Text('Generate Your First Report'),
+          ),
+        ],
+      ),
     );
   }
 }

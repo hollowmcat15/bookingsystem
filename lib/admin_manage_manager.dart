@@ -11,7 +11,6 @@ class AdminManageManager extends StatefulWidget {
 class _AdminManageManagerState extends State<AdminManageManager> {
   final SupabaseClient supabase = Supabase.instance.client;
   List<Map<String, dynamic>> managers = [];
-  List<Map<String, dynamic>> allSpas = [];
   bool _isLoading = false;
   String? _error;
 
@@ -19,68 +18,44 @@ class _AdminManageManagerState extends State<AdminManageManager> {
   void initState() {
     super.initState();
     _fetchManagers();
-    _fetchSpas();
   }
 
   Future<void> _fetchManagers() async {
     try {
       setState(() => _isLoading = true);
+      
+      // Fetch managers with their spa details
       final response = await supabase
           .from('staff')
-          .select('*, spa(*)')
+          .select('''
+            staff_id,
+            first_name,
+            last_name,
+            email,
+            phonenumber,
+            spa:spa_id (
+              spa_id,
+              spa_name,
+              spa_address,
+              spa_phonenumber
+            )
+          ''')
           .eq('role', 'Manager');
+
       setState(() {
         managers = List<Map<String, dynamic>>.from(response);
         _isLoading = false;
       });
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _fetchSpas() async {
-    try {
-      final response = await supabase.from('spa').select();
-      setState(() {
-        allSpas = List<Map<String, dynamic>>.from(response);
-      });
-    } catch (e) {
-      print('Error fetching spas: $e');
-    }
-  }
-
-  Future<void> _assignSpaToManager(int managerId, int? spaId) async {
-    try {
-      await supabase
-          .from('staff')
-          .update({'spa_id': spaId})
-          .eq('staff_id', managerId);
       if (mounted) {
-        _fetchManagers();
-      }
-    } catch (e) {
-      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error assigning spa: $e')),
+          SnackBar(content: Text('Error loading managers: ${e.toString()}')),
         );
       }
-    }
-  }
-
-  Future<void> _deleteManager(int managerId) async {
-    try {
-      await supabase
-          .from('staff')
-          .delete()
-          .eq('staff_id', managerId);
-      _fetchManagers();
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error deleting manager: $e')),
-      );
     }
   }
 
@@ -88,87 +63,64 @@ class _AdminManageManagerState extends State<AdminManageManager> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Manage Managers'),
+        title: Text('View Managers'),
       ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
           : _error != null
-              ? Center(child: Text(_error!))
-              : ListView.builder(
-                  itemCount: managers.length,
-                  itemBuilder: (context, index) {
-                    final manager = managers[index];
-                    return Card(
-                      margin: EdgeInsets.all(8),
-                      child: ExpansionTile(
-                        title: Text('${manager['first_name']} ${manager['last_name']}'),
-                        subtitle: Text(manager['email']),
-                        children: [
-                          Padding(
-                            padding: EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text('Phone: ${manager['phonenumber']}'),
-                                SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: DropdownButton<int?>(
-                                        value: manager['spa_id'],
-                                        hint: Text('Assign Spa'),
-                                        isExpanded: true,
-                                        items: [
-                                          DropdownMenuItem<int?>(
-                                            value: null,
-                                            child: Text('No Spa Assigned'),
-                                          ),
-                                          ...allSpas.map((spa) {
-                                            return DropdownMenuItem<int?>(
-                                              value: spa['spa_id'],
-                                              child: Text(spa['spa_name']),
-                                            );
-                                          }).toList(),
-                                        ],
-                                        onChanged: (spaId) {
-                                          _assignSpaToManager(manager['staff_id'], spaId);
-                                        },
-                                      ),
-                                    ),
-                                    IconButton(
-                                      icon: Icon(Icons.delete, color: Colors.red),
-                                      onPressed: () {
-                                        showDialog(
-                                          context: context,
-                                          builder: (context) => AlertDialog(
-                                            title: Text('Delete Manager'),
-                                            content: Text('Are you sure you want to delete this manager?'),
-                                            actions: [
-                                              TextButton(
-                                                child: Text('Cancel'),
-                                                onPressed: () => Navigator.pop(context),
-                                              ),
-                                              TextButton(
-                                                child: Text('Delete'),
-                                                onPressed: () {
-                                                  Navigator.pop(context);
-                                                  _deleteManager(manager['staff_id']);
-                                                },
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(_error!),
+                      ElevatedButton(
+                        onPressed: _fetchManagers,
+                        child: Text('Retry'),
                       ),
-                    );
-                  },
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _fetchManagers,
+                  child: managers.isEmpty
+                      ? Center(child: Text('No managers found'))
+                      : ListView.builder(
+                          itemCount: managers.length,
+                          itemBuilder: (context, index) {
+                            final manager = managers[index];
+                            final spa = manager['spa'];
+                            
+                            return Card(
+                              margin: EdgeInsets.all(8),
+                              child: ExpansionTile(
+                                title: Text('${manager['first_name']} ${manager['last_name']}'),
+                                subtitle: Text(manager['email']),
+                                children: [
+                                  Padding(
+                                    padding: EdgeInsets.all(16),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text('Phone: ${manager['phonenumber']}'),
+                                        if (spa != null) ...[
+                                          SizedBox(height: 16),
+                                          Text('Managing Spa:',
+                                              style: TextStyle(fontWeight: FontWeight.bold)),
+                                          SizedBox(height: 8),
+                                          Text(spa['spa_name']),
+                                          Text(spa['spa_address']),
+                                          Text('Phone: ${spa['spa_phonenumber']}'),
+                                        ] else
+                                          Text('\nNo spa currently assigned',
+                                              style: TextStyle(fontStyle: FontStyle.italic)),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                 ),
     );
   }

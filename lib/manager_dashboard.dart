@@ -32,31 +32,49 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   @override
   void initState() {
     super.initState();
+    // Add validation check
+    if (widget.managerData['manager_id'] == null) {
+      setState(() {
+        _error = 'Invalid manager data';
+      });
+      return;
+    }
     _fetchManagedSpas();
   }
 
   Future<void> _fetchManagedSpas() async {
+    if (widget.managerData['manager_id'] == null) {
+      setState(() {
+        _error = 'Invalid manager ID';
+      });
+      return;
+    }
+
     try {
       setState(() {
         _isLoading = true;
         _error = null;
       });
 
-      // Fetch all spas where manager_id matches the current manager's ID
       final response = await supabase
           .from('spa')
           .select('*, service(*)')
           .eq('manager_id', widget.managerData['manager_id']);
 
-      setState(() {
-        managedSpas = List<Map<String, dynamic>>.from(response);
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          managedSpas = List<Map<String, dynamic>>.from(response);
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+        print('Error fetching spas: $e'); // Debug print
+      }
     }
   }
 
@@ -376,7 +394,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                                 final service = services[serviceIndex];
                                                 return Padding(
                                                   padding: const EdgeInsets.symmetric(vertical: 2.0),
-                                                  child: Text("${service['service_name']} - \$${service['service_price']}"),
+                                                  child: Text("${service['service_name']} - ₱${service['service_price']}"),
                                                 );
                                               }),
                                               if (services.length > 3)

@@ -40,19 +40,16 @@ class _TherapistCommissionState extends State<TherapistCommission> {
     setState(() => _isLoading = true);
 
     try {
-      final int therapistId = widget.therapistData['therapist_id'];
+      final int staffId = widget.therapistData['therapist_id']; // This is actually staff_id
 
-      final therapistResponse = await supabase
-          .from('therapist')
+      // Get commission rate from staff table
+      final staffResponse = await supabase
+          .from('staff')
           .select('commission_percentage')
-          .eq('therapist_id', therapistId)
+          .eq('staff_id', staffId)
           .single();
 
-      // Convert commission percentage from database format (e.g., '15.00') to decimal (0.15)
-      final double commissionRate = (therapistResponse['commission_percentage'] is int
-          ? (therapistResponse['commission_percentage'] as int).toDouble()
-          : therapistResponse['commission_percentage'] ?? 15.00) / 100.0;
-
+      final double commissionRate = (staffResponse['commission_percentage'] as num).toDouble() / 100.0;
       _commissionRate = commissionRate;
 
       final String formattedStartDate = DateFormat('yyyy-MM-dd').format(_startDate);
@@ -76,7 +73,7 @@ class _TherapistCommissionState extends State<TherapistCommission> {
               last_name
             )
           ''')
-          .eq('therapist_id', therapistId)
+          .eq('therapist_id', staffId)
           .eq('status', 'Completed')
           .gte('booking_date', formattedStartDate)
           .lte('booking_date', formattedEndDate)
@@ -114,13 +111,16 @@ class _TherapistCommissionState extends State<TherapistCommission> {
         _isLoading = false;
       });
     } catch (e) {
+      print('Error loading commission data: $e');
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error loading commission data: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading commission data: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -232,14 +232,37 @@ class _TherapistCommissionState extends State<TherapistCommission> {
     return Expanded(
       child: Card(
         elevation: 3,
-        color: color.withOpacity(0.1),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white,
+                color.withOpacity(0.1),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.all(16.0),
           child: Column(
             children: [
-              Text(title, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color)),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
               SizedBox(height: 8),
-              Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ],
           ),
         ),
@@ -250,85 +273,117 @@ class _TherapistCommissionState extends State<TherapistCommission> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('My Commissions')),
+      appBar: AppBar(
+        title: Text('My Commissions'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _loadCommissionData,
+            tooltip: 'Refresh',
+          ),
+        ],
+      ),
       body: _isLoading
           ? Center(child: CircularProgressIndicator())
-          : ListView(
-              children: [
-                Container(
-                  padding: EdgeInsets.all(16),
-                  color: Colors.grey[100],
+          : RefreshIndicator(
+              onRefresh: _loadCommissionData,
+              child: SingleChildScrollView(
+                physics: AlwaysScrollableScrollPhysics(),
+                child: SafeArea(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Text('Commission Summary', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                      SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: DropdownButtonFormField<String>(
-                              decoration: InputDecoration(
-                                labelText: 'Time Period',
-                                border: OutlineInputBorder(),
-                                contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      // Period Selection Card
+                      Card(
+                        margin: EdgeInsets.all(16),
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Commission Summary',
+                                style: Theme.of(context).textTheme.titleLarge,
                               ),
-                              value: _selectedPeriod,
-                              items: _periodOptions.map((String period) {
-                                return DropdownMenuItem<String>(
-                                  value: period,
-                                  child: Text(period),
-                                );
-                              }).toList(),
-                              onChanged: (String? newValue) {
-                                if (newValue != null) {
-                                  setState(() {
-                                    _selectedPeriod = newValue;
-                                  });
-                                  if (newValue == 'Custom') {
-                                    _selectDateRange(context);
-                                  } else {
-                                    _updateDateRange();
+                              SizedBox(height: 16),
+                              DropdownButtonFormField<String>(
+                                decoration: InputDecoration(
+                                  labelText: 'Time Period',
+                                  border: OutlineInputBorder(),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                ),
+                                value: _selectedPeriod,
+                                items: _periodOptions.map((String period) {
+                                  return DropdownMenuItem<String>(
+                                    value: period,
+                                    child: Text(period),
+                                  );
+                                }).toList(),
+                                onChanged: (String? newValue) {
+                                  if (newValue != null) {
+                                    setState(() {
+                                      _selectedPeriod = newValue;
+                                    });
+                                    if (newValue == 'Custom') {
+                                      _selectDateRange(context);
+                                    } else {
+                                      _updateDateRange();
+                                    }
                                   }
-                                }
-                              },
-                            ),
-                          ),
-                          if (_selectedPeriod == 'Custom')
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8.0),
-                              child: ElevatedButton(
-                                onPressed: () => _selectDateRange(context),
-                                child: Icon(Icons.calendar_today),
+                                },
                               ),
-                            ),
-                        ],
+                              if (_selectedPeriod == 'Custom')
+                                Padding(
+                                  padding: EdgeInsets.only(top: 8),
+                                  child: OutlinedButton.icon(
+                                    onPressed: () => _selectDateRange(context),
+                                    icon: Icon(Icons.calendar_today),
+                                    label: Text('Select Dates'),
+                                  ),
+                                ),
+                              SizedBox(height: 8),
+                              Text('Date Range: $_dateRangeText'),
+                              Text(
+                                'Commission Rate: ${(_commissionRate * 100).toStringAsFixed(0)}%',
+                                style: TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      SizedBox(height: 12),
-                      Text('Date Range: $_dateRangeText'),
-                      SizedBox(height: 4),
-                      Text('Commission Rate: ${(_commissionRate * 100).toStringAsFixed(0)}%'),
+
+                      // Stats Cards
+                      Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
+                          children: [
+                            _buildStatCard(
+                              'Total Earnings',
+                              '₱${_totalEarnings.toStringAsFixed(2)}',
+                              Colors.green,
+                            ),
+                            SizedBox(width: 8),
+                            _buildStatCard(
+                              'Services Completed',
+                              '$_completedServices',
+                              Colors.blue,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Chart
+                      Card(
+                        margin: EdgeInsets.all(16),
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: _buildServiceEarningsChart(),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      _buildStatCard('Earnings', '₱${_totalEarnings.toStringAsFixed(2)}', Colors.green),
-                      SizedBox(width: 12),
-                      _buildStatCard('Completed', '$_completedServices', Colors.blue),
-                    ],
-                  ),
-                ),
-
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: _buildServiceEarningsChart(),
-                ),
-
-                SizedBox(height: 16),
-              ],
+              ),
             ),
     );
   }

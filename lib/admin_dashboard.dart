@@ -6,6 +6,8 @@ import 'admin_manage_staff.dart';
 import 'admin_manage_spa.dart';
 import 'admin_view_clients.dart';
 import 'admin_view_appointments.dart';
+import 'admin_add_manager.dart';  // Add this import
+import 'profile_page.dart'; // Import the profile page
 
 class AdminDashboard extends StatefulWidget {
   final Map<String, dynamic> adminData;
@@ -39,26 +41,36 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _fetchStats() async {
     try {
       setState(() => _isLoading = true);
-      final spasCount = await supabase
+
+      // Get count of approved spas
+      final List<Map<String, dynamic>> spasResponse = await supabase
           .from('spa')
-          .select('count');
-      final managersCount = await supabase
+          .select('spa_id')
+          .eq('approved', true);
+
+      // Get count of managers
+      final List<Map<String, dynamic>> managersResponse = await supabase
           .from('staff')
-          .select('count')
+          .select('staff_id')
           .eq('role', 'Manager');
-      final clientsCount = await supabase
+
+      // Get count of clients
+      final List<Map<String, dynamic>> clientsResponse = await supabase
           .from('client')
-          .select('count');
-      final appointmentsCount = await supabase
+          .select('client_id');
+
+      // Get count of active appointments
+      final List<Map<String, dynamic>> appointmentsResponse = await supabase
           .from('appointment')
-          .select('count');
+          .select('book_id')
+          .neq('status', 'Cancelled'); // Count non-cancelled appointments
           
       setState(() {
         stats = {
-          'spas': spasCount.length,
-          'managers': managersCount.length,
-          'clients': clientsCount.length,
-          'appointments': appointmentsCount.length,
+          'spas': spasResponse.length,
+          'managers': managersResponse.length,
+          'clients': clientsResponse.length,
+          'appointments': appointmentsResponse.length,
         };
         _isLoading = false;
       });
@@ -67,25 +79,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
         _error = e.toString();
         _isLoading = false;
       });
+      print('Error fetching stats: $e'); // For debugging
     }
   }
 
   Future<void> _addNewManager() async {
-    // Show dialog to add new manager
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Add New Manager'),
-        content: SingleChildScrollView(
-          child: AddManagerForm(
-            onManagerAdded: () {
-              _fetchStats();
-              Navigator.pop(context);
-            },
-          ),
-        ),
-      ),
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => AdminAddManager()),
     );
+    
+    if (result == true) {
+      // Refresh stats if manager was added successfully
+      _fetchStats();
+    }
   }
 
   Future<void> _logout() async {
@@ -117,6 +124,21 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                 ],
               ),
+            ),
+            ListTile(
+              leading: Icon(Icons.account_circle),
+              title: Text("Profile Settings"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ProfilePage(
+                      userRole: 'admin',
+                      initialData: widget.adminData,
+                    ),
+                  ),
+                );
+              },
             ),
             ListTile(
               leading: Icon(Icons.people),
@@ -266,115 +288,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class AddManagerForm extends StatefulWidget {
-  final VoidCallback onManagerAdded;
-
-  const AddManagerForm({Key? key, required this.onManagerAdded}) : super(key: key);
-
-  @override
-  _AddManagerFormState createState() => _AddManagerFormState();
-}
-
-class _AddManagerFormState extends State<AddManagerForm> {
-  final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _firstNameController = TextEditingController();
-  final _lastNameController = TextEditingController();
-  final _phoneController = TextEditingController();
-  final _birthdayController = TextEditingController();
-
-  Future<void> _addManager() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    try {
-      final supabase = Supabase.instance.client;
-      
-      // Create auth user
-      final authResponse = await supabase.auth.signUp(
-        email: _emailController.text,
-        password: 'temppass123', // Temporary password
-        data: {'role': 'manager'},
-      );
-
-      if (authResponse.user != null) {
-        // Add to staff table
-        await supabase.from('staff').insert({
-          'auth_id': authResponse.user!.id,
-          'first_name': _firstNameController.text,
-          'last_name': _lastNameController.text,
-          'email': _emailController.text,
-          'phonenumber': _phoneController.text,
-          'role': 'Manager',
-          'birthday': _birthdayController.text,
-        });
-
-        widget.onManagerAdded();
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error adding manager: ${e.toString()}')),
-      );
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Form(
-      key: _formKey,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextFormField(
-            controller: _emailController,
-            decoration: InputDecoration(labelText: 'Email'),
-            validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-          ),
-          TextFormField(
-            controller: _firstNameController,
-            decoration: InputDecoration(labelText: 'First Name'),
-            validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-          ),
-          TextFormField(
-            controller: _lastNameController,
-            decoration: InputDecoration(labelText: 'Last Name'),
-            validator: (value) => value?.isEmpty ?? true ? 'Required' : null,
-          ),
-          TextFormField(
-            controller: _phoneController,
-            decoration: InputDecoration(labelText: 'Phone'),
-            validator: (value) {
-              if (value == null || value.isEmpty) return 'Required';
-              if (value.length != 11) return 'Phone number must be 11 digits';
-              if (!RegExp(r'^\d{11}$').hasMatch(value)) {
-                return 'Enter a valid 11 digit phone number';
-              }
-              return null;
-            },
-            keyboardType: TextInputType.phone,
-            maxLength: 11,
-          ),
-          TextFormField(
-            controller: _birthdayController,
-            decoration: InputDecoration(labelText: 'Birthday (YYYY-MM-DD)'),
-            validator: (value) {
-              if (value == null || value.isEmpty) return 'Required';
-              if (!RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(value)) {
-                return 'Enter a valid date in YYYY-MM-DD format';
-              }
-              return null;
-            },
-          ),
-          SizedBox(height: 16),
-          ElevatedButton(
-            onPressed: _addManager,
-            child: Text('Add Manager'),
-          ),
-        ],
       ),
     );
   }

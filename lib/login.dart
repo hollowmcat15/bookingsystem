@@ -21,6 +21,8 @@ class _LoginPageState extends State<LoginPage> {
   final SupabaseClient supabase = Supabase.instance.client;
   bool _isLoading = false;
   String? _errorMessage;
+  bool _obscurePassword = true;  // Add this line for password visibility
+  final _formKey = GlobalKey<FormState>();  // Add this line for form validation
 
   @override
   void initState() {
@@ -43,6 +45,10 @@ class _LoginPageState extends State<LoginPage> {
 
   /// ✅ Handle Login
   void _login() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+    
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -92,7 +98,7 @@ class _LoginPageState extends State<LoginPage> {
             .from('staff')
             .select('''
               *,
-              spa (
+              spa:spa_id (
                 spa_id,
                 spa_name,
                 spa_address,
@@ -103,43 +109,69 @@ class _LoginPageState extends State<LoginPage> {
               )
             ''')
             .eq('auth_id', userId)
-            .single();
+            .eq('is_active', true) // Check if account is enabled, not their working status
+            .maybeSingle();
 
         if (staffData != null) {
           if (mounted) {
             switch (staffData['role']) {
               case 'Manager':
+                if (staffData['staff_id'] == null) throw Exception('Invalid manager data');
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ManagerDashboard(managerData: staffData),
+                    builder: (context) => ManagerDashboard(
+                      managerData: {
+                        'manager_id': staffData['staff_id'],
+                        'first_name': staffData['first_name'],
+                        'last_name': staffData['last_name'],
+                        'email': staffData['email'],
+                        'role': staffData['role'],
+                        // Add other necessary fields
+                      },
+                    ),
                   ),
                 );
-                break;
+                return;
               case 'Therapist':
-                if (staffData['status'] == 'Inactive') {
-                  throw 'Your account is currently inactive. Please contact your manager.';
-                }
+                // Remove the inactive status check to allow viewing appointments
+                final therapistData = {
+                  ...staffData,
+                  'therapist_id': staffData['staff_id'],
+                };
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => TherapistDashboard(therapistData: staffData),
+                    builder: (context) => TherapistDashboard(therapistData: therapistData),
                   ),
                 );
-                break;
+                return;
               case 'Receptionist':
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ReceptionistDashboard(receptionistData: staffData),
+                    builder: (context) => ReceptionistDashboard(
+                      receptionistData: {
+                        'staff_id': staffData['staff_id'],
+                        'spa_id': staffData['spa_id'],
+                        'first_name': staffData['first_name'],
+                        'last_name': staffData['last_name'],
+                        'email': staffData['email'],
+                        'role': staffData['role'],
+                        'spa': staffData['spa'],
+                        'phonenumber': staffData['phonenumber'],
+                        'is_active': staffData['is_active'],
+                      },
+                    ),
                   ),
                 );
-                break;
+                return;
             }
           }
           return;
         }
       } catch (e) {
+        print('Staff check error: $e');
         // Not a staff member, continue checking client
       }
 
@@ -194,85 +226,121 @@ class _LoginPageState extends State<LoginPage> {
       body: Padding(
         padding: const EdgeInsets.all(24.0),
         child: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Icon(Icons.lock, size: 80, color: Colors.blue),
-              SizedBox(height: 20),
-              Text("Welcome!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-              SizedBox(height: 10),
-              Text("Log-in to continue", style: TextStyle(fontSize: 16, color: Colors.grey)),
-              SizedBox(height: 30),
-              TextField(
-                controller: _emailController,
-                decoration: InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  prefixIcon: Icon(Icons.email),
-                ),
-                keyboardType: TextInputType.emailAddress,
-              ),
-              SizedBox(height: 16.0),
-              TextField(
-                controller: _passwordController,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                  prefixIcon: Icon(Icons.lock),
-                ),
-                obscureText: true,
-              ),
-              SizedBox(height: 20),
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 16.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: TextStyle(color: Colors.red),
-                    textAlign: TextAlign.center,
+          child: SingleChildScrollView(
+            child: Form(
+              key: _formKey,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  Icon(Icons.lock, size: 80, color: Colors.blue),
+                  SizedBox(height: 20),
+                  Text("Welcome!", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                  SizedBox(height: 10),
+                  Text("Log-in to continue", style: TextStyle(fontSize: 16, color: Colors.grey)),
+                  SizedBox(height: 30),
+                  TextFormField(
+                    controller: _emailController,
+                    decoration: InputDecoration(
+                      labelText: 'Email',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      prefixIcon: Icon(Icons.email),
+                      errorStyle: TextStyle(color: Colors.red),
+                    ),
+                    keyboardType: TextInputType.emailAddress,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your email';
+                      }
+                      if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
+                        return 'Please enter a valid email';
+                      }
+                      return null;
+                    },
                   ),
-                ),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _login,
-                style: ElevatedButton.styleFrom(
-                  padding: EdgeInsets.symmetric(horizontal: 40, vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                child: _isLoading
-                    ? SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 2,
+                  SizedBox(height: 16.0),
+                  TextFormField(
+                    controller: _passwordController,
+                    decoration: InputDecoration(
+                      labelText: 'Password',
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      prefixIcon: Icon(Icons.lock),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePassword ? Icons.visibility_off : Icons.visibility,
                         ),
-                      )
-                    : Text("Log-in", style: TextStyle(fontSize: 18)),
-              ),
-              SizedBox(height: 20),
-              TextButton(
-                onPressed: () {
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => SignUpPage()));
-                },
-                child: Text("Don't have an account? Sign up", style: TextStyle(fontSize: 16)),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChangePasswordPage(
-                        isForgotPassword: true,
+                        onPressed: () {
+                          setState(() {
+                            _obscurePassword = !_obscurePassword;
+                          });
+                        },
+                      ),
+                      errorStyle: TextStyle(color: Colors.red),
+                    ),
+                    obscureText: _obscurePassword,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Please enter your password';
+                      }
+                      if (value.length < 6) {
+                        return 'Password must be at least 6 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                  SizedBox(height: 20),
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 16.0),
+                      child: Text(
+                        _errorMessage!,
+                        style: TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
                       ),
                     ),
-                  );
-                },
-                child: Text(
-                  "Forgot password? Click here",
-                  style: TextStyle(fontSize: 16, color: Colors.blue),
-                ),
+                  ElevatedButton(
+                    onPressed: _isLoading ? null : _login,
+                    style: ElevatedButton.styleFrom(
+                      padding: EdgeInsets.symmetric(horizontal: 40, vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: _isLoading
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
+                            ),
+                          )
+                        : Text("Log-in", style: TextStyle(fontSize: 18)),
+                  ),
+                  SizedBox(height: 20),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => SignUpPage()));
+                    },
+                    child: Text("Don't have an account? Sign up", style: TextStyle(fontSize: 16)),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ChangePasswordPage(
+                            isForgotPassword: true,
+                            email: _emailController.text,
+                          ),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      "Forgot password? Click here",
+                      style: TextStyle(fontSize: 16, color: Colors.blue),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

@@ -44,23 +44,44 @@ Future<void> _fetchUserData() async {
     });
     
     final String? userEmail = supabase.auth.currentUser?.email;
+    final String? userId = supabase.auth.currentUser?.id;
     
     if (userEmail == null) {
       throw Exception("User email not found");
     }
     
-    String tableName;
-    
-    // Determine which table to query based on user role
+    // Query based on user role
     switch (widget.userRole.toLowerCase()) {
-      case 'manager':
-        tableName = 'manager';
-        
-        // First try by email for manager
+      case 'admin':
         final response = await supabase
-            .from(tableName)
+            .from('admin')
             .select()
-            .eq('email', userEmail)
+            .eq('auth_id', userId!)  // Add non-null assertion since we check above
+            .single();
+            
+        if (response != null) {
+          setState(() {
+            userData = response;
+            isLoading = false;
+          });
+          return;
+        }
+        throw Exception("Admin profile not found");
+
+      case 'manager':
+        // Try both auth_id and email for staff table
+        final response = await supabase
+            .from('staff')
+            .select('''
+              *,
+              spa:spa_id (
+                spa_id,
+                spa_name,
+                spa_address
+              )
+            ''')
+            .or('auth_id.eq.${userId},email.ilike.${userEmail}')
+            .eq('role', 'Manager')
             .limit(1);
             
         if (response != null && response.isNotEmpty) {
@@ -68,110 +89,65 @@ Future<void> _fetchUserData() async {
             userData = response[0];
             isLoading = false;
           });
-        } else if (_userId != null) {
-          // If email doesn't work, try by auth_id
-          final authResponse = await supabase
-              .from(tableName)
-              .select()
-              .eq('auth_id', _userId ?? '')
-              .limit(1);
-              
-          if (authResponse != null && authResponse.isNotEmpty) {
-            setState(() {
-              userData = authResponse[0];
-              isLoading = false;
-            });
-          } else {
-            throw Exception("Manager profile not found");
-          }
-        } else {
-          throw Exception("Manager profile not found");
+          return;
         }
-        break;
-
-      case 'client':
-  tableName = 'client';
-  
-  // For clients, we only search by email since there's no auth_id column
-  final response = await supabase
-      .from(tableName)
-      .select()
-      .eq('email', userEmail)
-      .limit(1);
-      
-  if (response != null && response.isNotEmpty) {
-    setState(() {
-      userData = response[0];
-      isLoading = false;
-    });
-  } else {
-    // Add some helpful debugging in console
-    print("Client not found with email: $userEmail");
-    
-    // Check if the client might exist but email casing is different (case sensitivity issue)
-    try {
-      final caseInsensitiveResponse = await supabase
-          .from(tableName)
-          .select()
-          .ilike('email', userEmail ?? '')
-          .limit(1);
-          
-      if (caseInsensitiveResponse != null && caseInsensitiveResponse.isNotEmpty) {
-        setState(() {
-          userData = caseInsensitiveResponse[0];
-          isLoading = false;
-        });
-      } else {
-        throw Exception("Client profile not found. Please ensure your account is properly registered.");
-      }
-    } catch (e) {
-      throw Exception("Client profile not found. Please ensure your account is properly registered.");
-    }
-  }
-  break;
+        throw Exception("Manager profile not found");
 
       case 'therapist':
-        tableName = 'therapist';
-        
-        // Try by email first
-        final response = await supabase
-            .from(tableName)
-            .select()
-            .eq('email', userEmail)
-            .limit(1);
-            
-        if (response != null && response.isNotEmpty) {
-          setState(() {
-            userData = response[0];
-            isLoading = false;
-          });
-        } else if (_userId != null) {
-          // If email doesn't work, try by auth_id
-          final authResponse = await supabase
-              .from(tableName)
-              .select()
-              .eq('auth_id', _userId ?? '')
-              .limit(1);
-              
-          if (authResponse != null && authResponse.isNotEmpty) {
-            setState(() {
-              userData = authResponse[0];
-              isLoading = false;
-            });
-          } else {
-            throw Exception("Therapist profile not found");
-          }
-        } else {
-          throw Exception("Therapist profile not found");
-        }
-        break;
-
       case 'receptionist':
-        tableName = 'receptionist';
+        // All staff types are in the staff table
+        final response2 = await supabase
+            .from('staff')
+            .select('''
+              *,
+              spa:spa_id (
+                spa_id,
+                spa_name,
+                spa_address
+              )
+            ''')
+            .eq('email', userEmail)
+            .eq('role', widget.userRole.capitalize()) // Capitalize first letter to match DB enum
+            .single(); // Use single() instead of limit(1)
+            
+        if (response2 != null) {
+          setState(() {
+            userData = response2;
+            isLoading = false;
+          });
+          return;
+        }
         
-        // Try by email first
+        // Fallback to auth_id if email lookup fails
+        if (_userId != null) {
+          final authResponse = await supabase
+              .from('staff')
+              .select('''
+                *,
+                spa:spa_id (
+                  spa_id,
+                  spa_name,
+                  spa_address
+                )
+              ''')
+              .eq('auth_id', _userId!)
+              .eq('role', widget.userRole.capitalize())
+              .single();
+              
+          if (authResponse != null) {
+            setState(() {
+              userData = authResponse;
+              isLoading = false;
+            });
+            return;
+          }
+        }
+        
+        throw Exception("${widget.userRole} profile not found");
+
+      case 'client':
         final response = await supabase
-            .from(tableName)
+            .from('client')
             .select()
             .eq('email', userEmail)
             .limit(1);
@@ -181,36 +157,36 @@ Future<void> _fetchUserData() async {
             userData = response[0];
             isLoading = false;
           });
-        } else if (_userId != null) {
-          // If email doesn't work, try by auth_id
-          final authResponse = await supabase
-              .from(tableName)
-              .select()
-              .eq('auth_id', _userId ?? '')
-              .limit(1);
-              
-          if (authResponse != null && authResponse.isNotEmpty) {
-            setState(() {
-              userData = authResponse[0];
-              isLoading = false;
-            });
-          } else {
-            throw Exception("Receptionist profile not found");
-          }
-        } else {
-          throw Exception("Receptionist profile not found");
+          return;
         }
-        break;
+        
+        // Try case-insensitive email search
+        final caseInsensitiveResponse = await supabase
+            .from('client')
+            .select()
+            .ilike('email', userEmail)
+            .limit(1);
+            
+        if (caseInsensitiveResponse != null && caseInsensitiveResponse.isNotEmpty) {
+          setState(() {
+            userData = caseInsensitiveResponse[0];
+            isLoading = false;
+          });
+          return;
+        }
+        
+        throw Exception("Client profile not found");
 
       default:
         throw Exception("Invalid user role: ${widget.userRole}");
     }
-    
   } catch (e) {
-    setState(() {
-      error = e.toString();
-      isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        error = e.toString();
+        isLoading = false;
+      });
+    }
     print("Error fetching user data: $e");
   }
 }

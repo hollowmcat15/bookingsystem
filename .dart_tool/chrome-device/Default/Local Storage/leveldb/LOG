@@ -1,3 +1,18 @@
-2025/05/23-21:19:44.512 1798 Reusing MANIFEST C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.b37668e1\flutter_tools_chrome_device.515e0b30\Default\Local Storage\leveldb/MANIFEST-000001
-2025/05/23-21:19:44.524 1798 Recovering log #3
-2025/05/23-21:19:44.528 1798 Reusing old log C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.b37668e1\flutter_tools_chrome_device.515e0b30\Default\Local Storage\leveldb/000003.log 
+2025/05/25-13:46:01.661 d94 Reusing MANIFEST C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.1fae779f\flutter_tools_chrome_device.b8c0bcb1\Default\Local Storage\leveldb/MANIFEST-000001
+2025/05/25-13:46:01.671 d94 Recovering log #13
+2025/05/25-13:46:01.674 d94 Reusing old log C:\Users\HOLLOW~1\AppData\Local\Temp\flutter_tools.1fae779f\flutter_tools_chrome_device.b8c0bcb1\Default\Local Storage\leveldb/000013.log 
+2025/05/25-13:46:01.676 d94 Delete type=0 #3
+2025/05/25-13:46:01.676 d94 Delete type=0 #4
+2025/05/25-13:46:01.676 d94 Delete type=0 #8
+2025/05/25-13:46:01.676 d94 Delete type=0 #10
+2025/05/25-14:03:34.341 3abc Level-0 table #17: started
+2025/05/25-14:03:34.345 3abc Level-0 table #17: 29133 bytes OK
+2025/05/25-14:03:34.347 3abc Delete type=0 #13
+2025/05/25-14:03:34.347 d94 Compacting 4@0 + 0@1 files
+2025/05/25-14:03:34.351 d94 Generated table #18@0: 96 keys, 28113 bytes
+2025/05/25-14:03:34.351 d94 Compacted 4@0 + 0@1 files => 28113 bytes
+2025/05/25-14:03:34.352 d94 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/05/25-14:03:34.352 d94 Delete type=2 #7
+2025/05/25-14:03:34.353 d94 Delete type=2 #11
+2025/05/25-14:03:34.353 d94 Delete type=2 #14
+2025/05/25-14:03:34.353 d94 Delete type=2 #17

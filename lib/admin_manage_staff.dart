@@ -29,7 +29,15 @@ class _AdminManageStaffState extends State<AdminManageStaff> {
       setState(() => _isLoading = true);
       final response = await supabase
           .from('staff')
-          .select('*, spa!inner(*)')
+          .select('''
+            *,
+            spa!staff_spa_id_fkey (
+              spa_id,
+              spa_name,
+              spa_address,
+              spa_phonenumber
+            )
+          ''')
           .order('created_at');
 
       final staff = List<Map<String, dynamic>>.from(response);
