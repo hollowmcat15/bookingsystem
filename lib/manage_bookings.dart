@@ -35,7 +35,6 @@ class _ManageBookingsState extends State<ManageBookings> {
   /// Fetch bookings based on user role
   Future<void> _fetchBookings() async {
     try {
-      // Adjusted to match your database schema
       final query = supabase.from('appointment').select('''
         book_id,
         spa_id,
@@ -49,7 +48,8 @@ class _ManageBookingsState extends State<ManageBookings> {
         updated_at,
         spa:spa(spa_id, spa_name),
         service:service(service_id, service_name, service_price),
-        client:client(client_id, first_name, last_name, email)
+        client:client(client_id, first_name, last_name, email),
+        therapist:therapist_id(first_name, last_name)
       ''');
 
       // Inside _fetchBookings() method
@@ -646,6 +646,72 @@ class _ManageBookingsState extends State<ManageBookings> {
     return timeInMinutes >= openingInMinutes && timeInMinutes <= closingInMinutes;
   }
 
+  void _showBookingDetails(Map<String, dynamic> booking) {
+    final bookingDateTime = _getBookingDateTime(booking);
+    if (bookingDateTime == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Booking Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.spa, color: Theme.of(context).primaryColor),
+                title: Text('Service'),
+                subtitle: Text(booking['service']['service_name']),
+              ),
+              ListTile(
+                leading: Icon(Icons.calendar_today, color: Theme.of(context).primaryColor),
+                title: Text('Date'),
+                subtitle: Text(DateFormat('MMM dd, yyyy').format(bookingDateTime)),
+              ),
+              ListTile(
+                leading: Icon(Icons.access_time, color: Theme.of(context).primaryColor),
+                title: Text('Time'),
+                subtitle: Text('${booking['booking_start_time']} - ${booking['booking_end_time']}'),
+              ),
+              ListTile(
+                leading: Icon(Icons.person, color: Theme.of(context).primaryColor),
+                title: Text('Therapist'),
+                subtitle: Text(
+                  booking['therapist'] != null 
+                    ? '${booking['therapist']['first_name']} ${booking['therapist']['last_name']}'
+                    : 'Not assigned'
+                ),
+              ),
+              ListTile(
+                leading: Icon(Icons.attach_money, color: Theme.of(context).primaryColor),
+                title: Text('Total'),
+                subtitle: Text('₱${booking['service']['service_price'].toString()}'),
+              ),
+              ListTile(
+                leading: Icon(Icons.info_outline, color: _getStatusTextColor(booking['status'])),
+                title: Text('Status'),
+                subtitle: Text(
+                  booking['status'],
+                  style: TextStyle(
+                    color: _getStatusTextColor(booking['status']),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -689,46 +755,61 @@ class _ManageBookingsState extends State<ManageBookings> {
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 4.0),
                       color: _getStatusColor(booking['status']),
-                      child: ListTile(
-                        title: Text('Service: ${booking['service']['service_name']}'),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Date: ${DateFormat('MMM dd, yyyy').format(bookingDateTime)}'),
-                            Text('Time: ${DateFormat('hh:mm a').format(bookingDateTime)}'),
-                            Text('Status: ${booking['status']}',
-                                style: TextStyle(color: _getStatusTextColor(booking['status']))),
-                          ],
-                        ),
-                        trailing: booking['status'] == 'Scheduled' ||
-                                booking['status'] == 'Rescheduled'
-                            ? PopupMenuButton(
-                                itemBuilder: (context) => [
-                                  if (widget.userRole == 'client')
-                                    PopupMenuItem(
-                                      child: const Text('Reschedule'),
-                                      onTap: () => _showRescheduleDialog(
-                                          context, bookingId: booking['book_id']),
-                                    ),
-                                  if (widget.userRole == 'manager')
-                                    PopupMenuItem(
-                                      child: const Text('Change Time'),
-                                      onTap: () => _showRescheduleDialog(
-                                          context, bookingId: booking['book_id']),
-                                    ),
-                                  PopupMenuItem(
-                                    child: const Text('Cancel'),
-                                    onTap: () => _cancelBooking(booking['book_id']),
-                                  ),
-                                  if (widget.userRole == 'manager')
-                                    PopupMenuItem(
-                                      child: const Text('Mark Complete'),
-                                      onTap: () =>
-                                          _markBookingComplete(booking['book_id']),
-                                    ),
-                                ],
-                              )
-                            : null,
+                      child: Column(
+                        children: [
+                          ListTile(
+                            title: Text('Service: ${booking['service']['service_name']}'),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Date: ${DateFormat('MMM dd, yyyy').format(bookingDateTime)}'),
+                                Text('Time: ${DateFormat('hh:mm a').format(bookingDateTime)}'),
+                                Text('Status: ${booking['status']}',
+                                    style: TextStyle(color: _getStatusTextColor(booking['status']))),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 8.0),
+                            child: Row(
+                              children: [
+                                TextButton.icon(
+                                  icon: Icon(Icons.visibility),
+                                  label: Text('View Details'),
+                                  onPressed: () => _showBookingDetails(booking),
+                                ),
+                                Spacer(),
+                                if (booking['status'] == 'Scheduled' || booking['status'] == 'Rescheduled')
+                                  PopupMenuButton(
+                                    itemBuilder: (context) => [
+                                      if (widget.userRole == 'client')
+                                        PopupMenuItem(
+                                          child: const Text('Reschedule'),
+                                          onTap: () => _showRescheduleDialog(
+                                              context, bookingId: booking['book_id']),
+                                        ),
+                                      if (widget.userRole == 'manager')
+                                        PopupMenuItem(
+                                          child: const Text('Change Time'),
+                                          onTap: () => _showRescheduleDialog(
+                                              context, bookingId: booking['book_id']),
+                                        ),
+                                      PopupMenuItem(
+                                        child: const Text('Cancel'),
+                                        onTap: () => _cancelBooking(booking['book_id']),
+                                      ),
+                                      if (widget.userRole == 'manager')
+                                        PopupMenuItem(
+                                          child: const Text('Mark Complete'),
+                                          onTap: () =>
+                                              _markBookingComplete(booking['book_id']),
+                                        ),
+                                    ],
+                                  )
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   },

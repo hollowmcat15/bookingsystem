@@ -240,7 +240,7 @@ Future<void> _logout() async {
 ),
             ListTile(
   leading: Icon(Icons.calendar_today),
-  title: Text("Manage Appointments"),
+  title: Text("Manage Bookings"),
   onTap: () async {
     final userEmail = Supabase.instance.client.auth.currentUser?.email;
 

@@ -25,7 +25,7 @@ class _ManageUsersState extends State<ManageUsers> {
   final List<String> _filterOptions = ['All', 'Therapists', 'Receptionists'];
   String _selectedUserType = 'Therapist';
   String _selectedStatus = 'Active'; // For therapists
-  DateTime _selectedBirthday = DateTime.now().subtract(Duration(days: 365 * 25)); // Default to 25 years ago
+  DateTime _selectedBirthday = DateTime.now().subtract(Duration(days: 365 * 18)); // Changed to 18 years ago
 
   // Form controllers for creating new user
   final TextEditingController _firstNameController = TextEditingController();
@@ -73,6 +73,37 @@ class _ManageUsersState extends State<ManageUsers> {
       return 'Please enter valid phone number';
     }
     return null;
+  }
+
+  // Add birthday validation method
+  String? _validateBirthday(DateTime? date) {
+    if (date == null) {
+      return 'Birthday is required';
+    }
+    final now = DateTime.now();
+    final minimumYear = now.year - 18;  // Must be at least 18 years old
+    
+    if (date.year >= minimumYear) {
+      return 'Must be at least 18 years old';
+    }
+    return null;
+  }
+
+  // Update birthday selection logic
+  Future<void> _selectBirthday(BuildContext context) async {
+    final currentYear = DateTime.now().year;
+    final minimumYear = currentYear - 18;  // Must be at least 18 years old
+    
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedBirthday,
+      firstDate: DateTime(1940),
+      lastDate: DateTime(minimumYear),  // Cannot select dates less than 18 years ago
+    );
+    
+    if (picked != null && picked != _selectedBirthday) {
+      setState(() => _selectedBirthday = picked);
+    }
   }
 
   @override
@@ -502,6 +533,33 @@ class _ManageUsersState extends State<ManageUsers> {
 
                             // Password Field
                             if (!isEdit) _buildPasswordField(setState, isPasswordVisible),
+                            SizedBox(height: 20),
+
+                            // Birthday Field
+                            GestureDetector(
+                              onTap: () => _selectBirthday(context),
+                              child: AbsorbPointer(
+                                child: TextFormField(
+                                  decoration: InputDecoration(
+                                    labelText: 'Birthday',
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    prefixIcon: Icon(Icons.calendar_today),
+                                  ),
+                                  controller: TextEditingController(
+                                    text: DateFormat('yyyy-MM-dd').format(_selectedBirthday),
+                                  ),
+                                  validator: (value) {
+                                    // Validate birthday only if it's not empty
+                                    if (value?.isEmpty ?? true) {
+                                      return 'Required';
+                                    }
+                                    return _validateBirthday(_selectedBirthday);
+                                  },
+                                ),
+                              ),
+                            ),
                             SizedBox(height: 32),
 
                             // Action Buttons

@@ -108,7 +108,7 @@ class _ReceptionistDashboardState extends State<ReceptionistDashboard> {
             ),
             ListTile(
               leading: Icon(Icons.calendar_today),
-              title: Text("Manage Appointments"),
+              title: Text("Manage Bookings"),
               onTap: () {
                 Navigator.pop(context);
                 _navigateToBookings();
@@ -129,7 +129,7 @@ class _ReceptionistDashboardState extends State<ReceptionistDashboard> {
             ),
             ListTile(
               leading: Icon(Icons.bar_chart),
-              title: Text("Generate Graphs"),
+              title: Text("Generate Reports"),
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
@@ -327,7 +327,7 @@ class _ReceptionistDashboardState extends State<ReceptionistDashboard> {
                                     ),
                                   ),
                                   Text(
-                                    "\$${service['service_price'].toStringAsFixed(2)}",
+                                    "₱${service['service_price'].toStringAsFixed(2)}",
                                     style: TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,

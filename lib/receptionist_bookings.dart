@@ -866,7 +866,7 @@ class _ReceptionistBookingsState extends State<ReceptionistBookings> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Manage Appointments', style: TextStyle(color: Colors.black87)),
+        title: const Text('Manage Bookings', style: TextStyle(color: Colors.black87)),
         backgroundColor: Colors.white,
         iconTheme: const IconThemeData(color: Colors.black87),
         elevation: 1,
@@ -1151,7 +1151,7 @@ class AppointmentCard extends StatelessWidget {
                 child: Wrap(
                   spacing: 8.0,
                   runSpacing: 4.0,
-                  alignment: WrapAlignment.end,
+                  alignment: WrapAlignment.start,  // Changed from end to start
                   children: [
                     // Mark Complete Button - always show if appointment is not cancelled/completed
                     TextButton.icon(

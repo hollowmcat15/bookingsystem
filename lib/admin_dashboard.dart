@@ -8,6 +8,9 @@ import 'admin_view_clients.dart';
 import 'admin_view_appointments.dart';
 import 'admin_add_manager.dart';  // Add this import
 import 'profile_page.dart'; // Import the profile page
+import 'admin_view_commission.dart';
+import 'admin_view_reports.dart';
+import 'admin_view_feedback.dart';
 
 class AdminDashboard extends StatefulWidget {
   final Map<String, dynamic> adminData;
@@ -65,12 +68,18 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .select('book_id')
           .neq('status', 'Cancelled'); // Count non-cancelled appointments
           
+      // Get count of feedback
+      final List<Map<String, dynamic>> feedbackResponse = await supabase
+          .from('feedback')
+          .select('feedback_id');
+
       setState(() {
         stats = {
           'spas': spasResponse.length,
           'managers': managersResponse.length,
           'clients': clientsResponse.length,
           'appointments': appointmentsResponse.length,
+          'feedback': feedbackResponse.length,
         };
         _isLoading = false;
       });
@@ -191,6 +200,36 @@ class _AdminDashboardState extends State<AdminDashboard> {
               },
             ),
             ListTile(
+              leading: Icon(Icons.monetization_on),
+              title: Text("View Commissions"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => AdminViewCommission()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.assessment),
+              title: Text("View Reports"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => AdminViewReports()),
+                );
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.feedback),
+              title: Text("View Feedback"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => AdminViewFeedback()),
+                );
+              },
+            ),
+            ListTile(
               leading: Icon(Icons.exit_to_app),
               title: Text("Logout"),
               onTap: _logout,
@@ -233,6 +272,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                         _buildStatCard('Managers', stats['managers'] ?? 0, Icons.manage_accounts),
                         _buildStatCard('Clients', stats['clients'] ?? 0, Icons.people),
                         _buildStatCard('Appointments', stats['appointments'] ?? 0, Icons.calendar_today),
+                        _buildStatCard('Feedback', stats['feedback'] ?? 0, Icons.feedback),
                       ],
                     ),
                     SizedBox(height: 24),
@@ -253,11 +293,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ),
               ),
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _addNewManager,
-        child: Icon(Icons.add),
-        tooltip: 'Add New Manager',
-      ),
     );
   }
 

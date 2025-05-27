@@ -655,7 +655,7 @@ class _GenerateReportsState extends State<GenerateReports> {
                 Expanded(
                   child: _buildMetricCard(
                     'Total Revenue',
-                    '\$${totalRevenue.toStringAsFixed(2)}',
+                    '₱${totalRevenue.toStringAsFixed(2)}',
                     Icons.attach_money,
                     Colors.green,
                   ),
@@ -724,7 +724,7 @@ class _GenerateReportsState extends State<GenerateReports> {
                                   showTitles: true,
                                   getTitlesWidget: (value, meta) {
                                     return Text(
-                                      '\$${value.toInt()}',
+                                      '₱${value.toInt()}',
                                       style: const TextStyle(fontSize: 10),
                                     );
                                   },
@@ -787,7 +787,7 @@ class _GenerateReportsState extends State<GenerateReports> {
                     rows: _salesData.map((item) {
                       return DataRow(cells: [
                         DataCell(Text(item['date'])),
-                        DataCell(Text('\$${item['total_revenue'].toStringAsFixed(2)}')),
+                        DataCell(Text('₱${item['total_revenue'].toStringAsFixed(2)}')),
                         DataCell(Text('${item['bookings']}')),
                       ]);
                     }).toList(),

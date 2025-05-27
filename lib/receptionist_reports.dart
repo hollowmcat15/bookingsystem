@@ -16,8 +16,9 @@ class _ReceptionistReportsState extends State<ReceptionistReports> {
   final SupabaseClient supabase = Supabase.instance.client;
   bool _isLoading = true;
   DateTimeRange? _dateRange;
-  List<Map<String, dynamic>> _appointmentStats = [];
+  double _totalSales = 0;
   List<Map<String, dynamic>> _serviceStats = [];
+  String _selectedReport = 'sales';
 
   @override
   void initState() {
@@ -43,39 +44,34 @@ class _ReceptionistReportsState extends State<ReceptionistReports> {
             )
           ''')
           .eq('spa_id', widget.receptionistData['spa_id'])
+          .eq('status', 'Completed')
           .gte('booking_date', _dateRange!.start.toIso8601String())
           .lte('booking_date', _dateRange!.end.toIso8601String());
 
-      // Process data for graphs
-      Map<String, int> statusCounts = {
-        'Scheduled': 0,
-        'Completed': 0,
-        'Cancelled': 0,
-        'Rescheduled': 0,
-      };
-      
-      Map<String, int> serviceBookings = {};
+      Map<String, Map<String, dynamic>> serviceStats = {};
+      double totalSales = 0;
 
       for (var appointment in response) {
-        // Count by status
-        final status = appointment['status'] as String;
-        statusCounts[status] = (statusCounts[status] ?? 0) + 1;
-
-        // Count by service
         final serviceName = appointment['service']['service_name'] as String;
-        serviceBookings[serviceName] = (serviceBookings[serviceName] ?? 0) + 1;
+        final servicePrice = appointment['service']['service_price'] as num;
+        
+        if (!serviceStats.containsKey(serviceName)) {
+          serviceStats[serviceName] = {
+            'service': serviceName,
+            'count': 0,
+            'revenue': 0.0,
+          };
+        }
+        
+        serviceStats[serviceName]!['count'] = (serviceStats[serviceName]!['count'] as int) + 1;
+        serviceStats[serviceName]!['revenue'] = (serviceStats[serviceName]!['revenue'] as double) + servicePrice;
+        totalSales += servicePrice;
       }
 
       setState(() {
-        _appointmentStats = statusCounts.entries
-            .map((e) => {'status': e.key, 'count': e.value})
-            .toList();
-
-        _serviceStats = serviceBookings.entries
-            .map((e) => {'service': e.key, 'count': e.value})
-            .toList()
+        _totalSales = totalSales;
+        _serviceStats = serviceStats.values.toList()
           ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
-
         _isLoading = false;
       });
     } catch (e) {
@@ -100,181 +96,176 @@ class _ReceptionistReportsState extends State<ReceptionistReports> {
     }
   }
 
-  Widget _buildDateRangeCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Date Range',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey[800]),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}',
-            style: TextStyle(fontSize: 16, color: Colors.blueGrey[600]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAppointmentStatusPieChart() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Appointment Status',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey[800]),
-          ),
-          const SizedBox(height: 16),
-          _isLoading
-              ? Center(child: CircularProgressIndicator())
-              : SizedBox(
-                  height: 200,
-                  child: PieChart(
-                    PieChartData(
-                      sections: _appointmentStats
-                          .map((stat) => PieChartSectionData(
-                                value: stat['count'].toDouble(),
-                                title: '${stat['status']}',
-                                color: _getStatusColor(stat['status']),
-                                radius: 50,
-                              ))
-                          .toList(),
-                    ),
-                  ),
-                ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildServiceBarChart() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Service Bookings',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blueGrey[800]),
-          ),
-          const SizedBox(height: 16),
-          _isLoading
-              ? Center(child: CircularProgressIndicator())
-              : SizedBox(
-                  height: 200,
-                  child: BarChart(
-                    BarChartData(
-                      barGroups: _serviceStats
-                          .asMap()
-                          .entries
-                          .map((entry) {
-                            final i = entry.key;
-                            final stat = entry.value;
-                            return BarChartGroupData(
-                              x: i,
-                              barRods: [
-                                BarChartRodData(
-                                  toY: stat['count'].toDouble(),
-                                  color: Colors.blue,
-                                  width: 20,
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                              ],
-                            );
-                          })
-                          .toList(),
-                    ),
-                  ),
-                ),
-        ],
-      ),
-    );
-  }
-
-  Color _getStatusColor(String status) {
-    switch (status) {
-      case 'Scheduled':
-        return Colors.orange;
-      case 'Completed':
-        return Colors.green;
-      case 'Cancelled':
-        return Colors.red;
-      case 'Rescheduled':
-        return Colors.blue;
-      default:
-        return Colors.grey;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Analytics'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: _selectDateRange,
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Reports'),
+          bottom: TabBar(
+            tabs: [
+              Tab(text: 'Sales Report'),
+              Tab(text: 'Frequently Availed Services'),
+            ],
+            onTap: (index) {
+              setState(() {
+                _selectedReport = index == 0 ? 'sales' : 'services';
+              });
+            },
           ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        body: Column(
+          children: [
+            Padding(
+              padding: EdgeInsets.all(16),
+              child: Row(
                 children: [
-                  _buildDateRangeCard(),
-                  const SizedBox(height: 20),
-                  _buildAppointmentStatusPieChart(),
-                  const SizedBox(height: 20),
-                  _buildServiceBarChart(),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: Icon(Icons.calendar_today),
+                      label: Text(DateFormat('yyyy-MM-dd').format(_dateRange!.start)),
+                      onPressed: () => _selectDateRange(),
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: Icon(Icons.calendar_today),
+                      label: Text(DateFormat('yyyy-MM-dd').format(_dateRange!.end)),
+                      onPressed: () => _selectDateRange(),
+                    ),
+                  ),
                 ],
               ),
             ),
+            Expanded(
+              child: _isLoading
+                  ? Center(child: CircularProgressIndicator())
+                  : TabBarView(
+                      children: [
+                        _buildSalesView(),
+                        _buildServicesView(),
+                      ],
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSalesView() {
+    double totalRevenue = _totalSales;
+
+    return Column(
+      children: [
+        Card(
+          margin: EdgeInsets.all(16),
+          child: Padding(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Text('Total Revenue', style: TextStyle(fontSize: 20)),
+                Text(
+                  '₱${totalRevenue.toStringAsFixed(2)}',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.green,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _serviceStats.length,
+            itemBuilder: (context, index) {
+              final stat = _serviceStats[index];
+              return Card(
+                margin: EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: ListTile(
+                  title: Text(stat['service']),
+                  subtitle: Text('${stat['count']} bookings'),
+                  trailing: Text(
+                    '₱${(stat['revenue'] as double).toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildServicesView() {
+    if (_serviceStats.isEmpty) {
+      return Center(child: Text('No services data available'));
+    }
+
+    final totalBookings = _serviceStats.fold(0, (sum, item) => sum + (item['count'] as int));
+
+    return Column(
+      children: [
+        AspectRatio(
+          aspectRatio: 1.7,
+          child: Card(
+            margin: EdgeInsets.all(16),
+            child: PieChart(
+              PieChartData(
+                sections: _serviceStats.take(5).map((service) {
+                  final percentage = (service['count'] as int) / totalBookings * 100;
+                  return PieChartSectionData(
+                    value: service['count'].toDouble(),
+                    title: '${percentage.toStringAsFixed(1)}%\n${service['service']}',
+                    radius: 100,
+                    titleStyle: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  );
+                }).toList(),
+                sectionsSpace: 2,
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            itemCount: _serviceStats.length,
+            itemBuilder: (context, index) {
+              final service = _serviceStats[index];
+              return Card(
+                margin: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: ListTile(
+                  leading: CircleAvatar(
+                    child: Text('${index + 1}'),
+                    backgroundColor: Colors.blue,
+                    foregroundColor: Colors.white,
+                  ),
+                  title: Text(service['service']),
+                  subtitle: Text('Booked ${service['count']} times'),
+                  trailing: Text(
+                    '₱${(service['revenue'] as double).toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 }

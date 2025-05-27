@@ -27,24 +27,42 @@ class _AdminManageStaffState extends State<AdminManageStaff> {
   Future<void> _fetchStaff() async {
     try {
       setState(() => _isLoading = true);
-      final response = await supabase
+
+      // For managers, specify the manager-spa relationship using fk_manager
+      final managerResponse = await supabase
           .from('staff')
           .select('''
             *,
-            spa!staff_spa_id_fkey (
+            managed_spa:spa!fk_manager(
               spa_id,
               spa_name,
               spa_address,
               spa_phonenumber
             )
           ''')
-          .order('created_at');
+          .eq('role', 'Manager');
 
-      final staff = List<Map<String, dynamic>>.from(response);
+      // For other staff, use the explicit staff-spa relationship
+      final otherStaffResponse = await supabase
+          .from('staff')
+          .select('''
+            *,
+            spa:spa!staff_spa_id_fkey(
+              spa_id,
+              spa_name,
+              spa_address,
+              spa_phonenumber
+            )
+          ''')
+          .neq('role', 'Manager');
+
+      final managers = List<Map<String, dynamic>>.from(managerResponse);
+      final otherStaff = List<Map<String, dynamic>>.from(otherStaffResponse);
+
       final groupedStaff = {
-        'Manager': staff.where((s) => s['role'] == 'Manager').toList(),
-        'Therapist': staff.where((s) => s['role'] == 'Therapist').toList(),
-        'Receptionist': staff.where((s) => s['role'] == 'Receptionist').toList(),
+        'Manager': managers,
+        'Therapist': otherStaff.where((s) => s['role'] == 'Therapist').toList(),
+        'Receptionist': otherStaff.where((s) => s['role'] == 'Receptionist').toList(),
       };
 
       setState(() {
@@ -72,6 +90,13 @@ class _AdminManageStaffState extends State<AdminManageStaff> {
           itemCount: staffList.length,
           itemBuilder: (context, index) {
             final staff = staffList[index];
+            // Update spa info access based on role
+            final spaInfo = role == 'Manager' 
+                ? (staff['managed_spa'] != null && staff['managed_spa'].length > 0 
+                    ? staff['managed_spa'][0] 
+                    : null)
+                : staff['spa'];
+            
             return Card(
               margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: ListTile(
@@ -79,7 +104,10 @@ class _AdminManageStaffState extends State<AdminManageStaff> {
                 subtitle: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Spa: ${staff['spa']['spa_name']}'),
+                    if (spaInfo != null) 
+                      Text('Spa: ${spaInfo['spa_name']}')
+                    else
+                      Text('No Spa Assigned'),
                     Text('Email: ${staff['email']}'),
                     Text('Phone: ${staff['phonenumber']}'),
                     if (role == 'Therapist')
@@ -97,22 +125,40 @@ class _AdminManageStaffState extends State<AdminManageStaff> {
 
   @override
   Widget build(BuildContext context) {
+    // Filter staff based on selected role
+    List<Widget> staffLists = [];
+    
+    if (_selectedRole == 'All') {
+      staffLists = [
+        _buildStaffList('Manager'),
+        SizedBox(height: 16),
+        _buildStaffList('Therapist'),
+        SizedBox(height: 16),
+        _buildStaffList('Receptionist'),
+      ];
+    } else {
+      staffLists = [_buildStaffList(_selectedRole)];
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Staff Management'),
         actions: [
-          DropdownButton<String>(
-            value: _selectedRole,
-            items: [
-              DropdownMenuItem(value: 'All', child: Text('All Roles')),
-              DropdownMenuItem(value: 'Manager', child: Text('Managers')),
-              DropdownMenuItem(value: 'Therapist', child: Text('Therapists')),
-              DropdownMenuItem(value: 'Receptionist', child: Text('Receptionists')),
-            ],
-            onChanged: (value) {
-              setState(() => _selectedRole = value!);
-              _fetchStaff();
-            },
+          Padding(
+            padding: EdgeInsets.only(right: 16),
+            child: DropdownButton<String>(
+              value: _selectedRole,
+              underline: Container(), // Remove the underline
+              items: [
+                DropdownMenuItem(value: 'All', child: Text('All Roles')),
+                DropdownMenuItem(value: 'Manager', child: Text('Managers')),
+                DropdownMenuItem(value: 'Therapist', child: Text('Therapists')),
+                DropdownMenuItem(value: 'Receptionist', child: Text('Receptionists')),
+              ],
+              onChanged: (value) {
+                setState(() => _selectedRole = value!);
+              },
+            ),
           ),
         ],
       ),
@@ -122,15 +168,7 @@ class _AdminManageStaffState extends State<AdminManageStaff> {
               ? Center(child: Text(_error!))
               : SingleChildScrollView(
                   padding: EdgeInsets.all(16),
-                  child: Column(
-                    children: [
-                      _buildStaffList('Manager'),
-                      SizedBox(height: 16),
-                      _buildStaffList('Therapist'),
-                      SizedBox(height: 16),
-                      _buildStaffList('Receptionist'),
-                    ],
-                  ),
+                  child: Column(children: staffLists),
                 ),
     );
   }

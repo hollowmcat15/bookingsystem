@@ -27,7 +27,7 @@ class _AdminManageSpaState extends State<AdminManageSpa> {
           .from('spa')
           .select('''
             *,
-            manager:manager_id (
+            manager:staff!fk_manager ( 
               staff_id,
               first_name,
               last_name,
@@ -97,6 +97,39 @@ class _AdminManageSpaState extends State<AdminManageSpa> {
     );
   }
 
+  Widget _buildStatusChip(bool? approved) {
+    late final String status;
+    late final Color? textColor;
+    late final Color? bgColor;
+
+    if (approved == null) {
+      status = 'Pending';
+      textColor = Colors.orange[900];
+      bgColor = Colors.orange[50];
+    } else if (approved) {
+      status = 'Approved';
+      textColor = Colors.green[900];
+      bgColor = Colors.green[50];
+    } else {
+      status = 'Rejected';
+      textColor = Colors.red[900];
+      bgColor = Colors.red[50];
+    }
+
+    return Chip(
+      label: Text(
+        status,
+        style: TextStyle(
+          color: textColor,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      backgroundColor: bgColor,
+      padding: EdgeInsets.symmetric(horizontal: 8),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -126,7 +159,7 @@ class _AdminManageSpaState extends State<AdminManageSpa> {
                           itemCount: spas.length,
                           itemBuilder: (context, index) {
                             final spa = spas[index];
-                            final manager = spa['staff'];
+                            final manager = spa['manager'];  // Changed from spa['staff']
                             final services = List<Map<String, dynamic>>.from(spa['service']);
                             final bool isApproved = spa['approved'] ?? false;
                             
@@ -144,18 +177,7 @@ class _AdminManageSpaState extends State<AdminManageSpa> {
                                         ),
                                       ),
                                     ),
-                                    if (!isApproved)
-                                      Chip(
-                                        label: Text(
-                                          'Pending',
-                                          style: TextStyle(
-                                            color: Colors.orange[900],
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        backgroundColor: Colors.orange[100],
-                                        padding: EdgeInsets.symmetric(horizontal: 8),
-                                      ),
+                                    _buildStatusChip(spa['approved']),
                                   ],
                                 ),
                                 subtitle: Text(
@@ -193,7 +215,7 @@ class _AdminManageSpaState extends State<AdminManageSpa> {
                                         ),
                                         Divider(),
                                         _buildServicesList(services),
-                                        if (!isApproved) ...[
+                                        if (spa['approved'] == null) ...[  // Only show buttons for pending spas
                                           SizedBox(height: 16),
                                           Divider(),
                                           Padding(

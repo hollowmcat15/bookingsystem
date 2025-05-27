@@ -25,16 +25,14 @@ class _EditProfilePageState extends State<EditProfilePage> {
   late TextEditingController _addressController;
   late TextEditingController _birthdayController; // For therapist
   
-  // Additional controllers for email/password
+  // Password change controllers
   late TextEditingController _currentPasswordController;
   late TextEditingController _newPasswordController;
   late TextEditingController _confirmPasswordController;
-  late TextEditingController _newEmailController;
 
   bool _showCurrentPassword = false;
   bool _showNewPassword = false;
   bool _showConfirmPassword = false;
-  bool _isEmailChangeMode = false;
   bool _isPasswordChangeMode = false;
   bool _isLoading = true;
   String? _error;
@@ -70,7 +68,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
     _currentPasswordController = TextEditingController();
     _newPasswordController = TextEditingController();
     _confirmPasswordController = TextEditingController();
-    _newEmailController = TextEditingController();
     
     _setupBasedOnRole();
     
@@ -147,7 +144,6 @@ void _setupBasedOnRole() {
     _currentPasswordController.dispose();
     _newPasswordController.dispose();
     _confirmPasswordController.dispose();
-    _newEmailController.dispose();
     super.dispose();
   }
 
@@ -285,96 +281,6 @@ void _setupBasedOnRole() {
     }
   }
 
-  Future<void> _updateEmail() async {
-    if (!_formKey.currentState!.validate()) return;
-
-    try {
-      setState(() => _isLoading = true);
-      final newEmail = _newEmailController.text.trim();
-
-      // 1. First verify current password
-      try {
-        final response = await supabase.auth.signInWithPassword(
-          email: _userEmail!,
-          password: _currentPasswordController.text,
-        );
-
-        if (response.user == null) {
-          throw 'Current password is incorrect';
-        }
-      } catch (e) {
-        print('Password verification failed: $e');
-        throw 'Current password is incorrect. Please verify and try again.';
-      }
-
-      // 2. Send OTP
-      await supabase.auth.signInWithOtp(
-        email: _userEmail!,
-        shouldCreateUser: false,
-      );
-
-      // 3. Show OTP verification dialog
-      final verified = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => OTPVerificationDialog(
-          email: _userEmail!,
-          title: 'Verify Email Change',
-          message: 'Please enter the verification code sent to $_userEmail',
-          type: OtpType.email,
-        ),
-      );
-
-      if (verified != true) return;
-
-      // 4. Update auth email
-      final authUpdateResponse = await supabase.auth.updateUser(
-        UserAttributes(email: newEmail),
-      );
-
-      if (authUpdateResponse.user == null) {
-        throw 'Failed to update email in authentication';
-      }
-
-      // 5. Update email in database
-      await supabase
-          .from(_tableName!)
-          .update({'email': newEmail})
-          .eq(_userIdField!, _userData![_userIdField!]);
-
-      // 6. Sign out and redirect to login
-      if (mounted) {
-        await supabase.auth.signOut();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Email updated. Please sign in with your new email.'),
-            duration: Duration(seconds: 8),
-          ),
-        );
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
-      }
-    } catch (e) {
-      print('Email update error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${e.toString()}'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-          _isEmailChangeMode = false;
-          _currentPasswordController.clear();
-          _newEmailController.clear();
-        });
-      }
-    }
-  }
-
   // Add new method for password change with OTP
   Future<void> _updatePasswordWithOTP() async {
     if (!_formKey.currentState!.validate()) return;
@@ -457,11 +363,14 @@ void _setupBasedOnRole() {
   }
 
   Future<void> _pickDate() async {
+    final currentYear = DateTime.now().year;
+    final minimumYear = currentYear - 18;  // Must be at least 18 years old
+    
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedBirthday ?? DateTime.now().subtract(Duration(days: 365 * 25)),
+      initialDate: _selectedBirthday ?? DateTime(minimumYear - 5), // Default to 23 years old
       firstDate: DateTime(1940),
-      lastDate: DateTime.now().subtract(Duration(days: 365 * 18)),
+      lastDate: DateTime(minimumYear),  // Cannot select dates less than 18 years ago
     );
     
     if (picked != null && picked != _selectedBirthday) {
@@ -531,18 +440,8 @@ void _setupBasedOnRole() {
                 _buildTab(
                   title: 'Profile',
                   icon: Icons.person,
-                  isSelected: !_isEmailChangeMode && !_isPasswordChangeMode,
+                  isSelected: !_isPasswordChangeMode,
                   onTap: () => setState(() {
-                    _isEmailChangeMode = false;
-                    _isPasswordChangeMode = false;
-                  }),
-                ),
-                _buildTab(
-                  title: 'Email',
-                  icon: Icons.email,
-                  isSelected: _isEmailChangeMode,
-                  onTap: () => setState(() {
-                    _isEmailChangeMode = true;
                     _isPasswordChangeMode = false;
                   }),
                 ),
@@ -551,7 +450,6 @@ void _setupBasedOnRole() {
                   icon: Icons.lock,
                   isSelected: _isPasswordChangeMode,
                   onTap: () => setState(() {
-                    _isEmailChangeMode = false;
                     _isPasswordChangeMode = true;
                   }),
                 ),
@@ -640,7 +538,7 @@ void _setupBasedOnRole() {
           SizedBox(height: 20),
 
           // Show different forms based on mode
-          if (!_isEmailChangeMode && !_isPasswordChangeMode) ...[
+          if (!_isPasswordChangeMode) ...[
             // Original profile edit form fields
             TextFormField(
               controller: _firstNameController,
@@ -671,9 +569,21 @@ void _setupBasedOnRole() {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.phone),
               ),
+              keyboardType: TextInputType.phone,
+              maxLength: 11,
+              buildCounter: (BuildContext context, {
+                required int currentLength,
+                required bool isFocused,
+                required int? maxLength,
+              }) {
+                return Text('$currentLength/$maxLength');
+              },
               validator: (value) {
                 if (value == null || value.isEmpty) {
                   return 'Please enter your phone number';
+                }
+                if (value.length != 11) {
+                  return 'Phone number must be exactly 11 digits';
                 }
                 return null;
               },
@@ -757,54 +667,6 @@ void _setupBasedOnRole() {
               child: ElevatedButton(
                 onPressed: _updateProfile,
                 child: Text('Save Changes', style: TextStyle(fontSize: 16)),
-              ),
-            ),
-          ],
-
-          if (_isEmailChangeMode) ...[
-            TextFormField(
-              controller: _newEmailController,
-              decoration: InputDecoration(
-                labelText: 'New Email',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.email),
-              ),
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return 'Please enter new email';
-                }
-                if (!RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(value)) {
-                  return 'Please enter a valid email';
-                }
-                return null;
-              },
-            ),
-            SizedBox(height: 16),
-            TextFormField(
-              controller: _currentPasswordController,
-              decoration: InputDecoration(
-                labelText: 'Current Password',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock),
-                suffixIcon: IconButton(
-                  icon: Icon(
-                    _showCurrentPassword ? Icons.visibility : Icons.visibility_off,
-                  ),
-                  onPressed: () => setState(() {
-                    _showCurrentPassword = !_showCurrentPassword;
-                  }),
-                ),
-              ),
-              obscureText: !_showCurrentPassword,
-              validator: (value) => value!.isEmpty ? 'Please enter current password' : null,
-            ),
-            SizedBox(height: 24),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _updateEmail,
-                child: Text('Update Email', style: TextStyle(fontSize: 16)),
               ),
             ),
           ],

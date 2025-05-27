@@ -161,6 +161,7 @@ class _AddSpaState extends State<AddSpa> {
         'opening_time': '${_openingTime.hour.toString().padLeft(2, '0')}:${_openingTime.minute.toString().padLeft(2, '0')}',
         'closing_time': '${_closingTime.hour.toString().padLeft(2, '0')}:${_closingTime.minute.toString().padLeft(2, '0')}',
         'image_url': _uploadedImageUrl,
+        'approved': null,  // Explicitly set to null for pending status
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       });

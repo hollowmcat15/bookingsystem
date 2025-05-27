@@ -39,12 +39,13 @@ class _ManageCommissionState extends State<ManageCommission> {
         _error = null;
       });
 
-      // Fetch therapists from staff table
+      // Fetch only therapists from staff table
       final therapistsResponse = await supabase
           .from('staff')
           .select('*')
           .eq('spa_id', widget.spaId)
-          .eq('role', 'Therapist');
+          .eq('role', 'Therapist')
+          .eq('is_active', true);  // Only get active therapists
 
       if (therapistsResponse != null) {
         setState(() {
@@ -76,7 +77,7 @@ class _ManageCommissionState extends State<ManageCommission> {
       final response = await supabase
           .from('appointment')
           .select('*, service(*)')
-          .eq('staff_id', staffId)
+          .eq('therapist_id', staffId)  // Changed from staff_id to therapist_id
           .eq('status', 'Completed')
           .gte('booking_date', formattedStartDate)
           .lt('booking_date', formattedEndDate);
@@ -93,16 +94,8 @@ class _ManageCommissionState extends State<ManageCommission> {
 
   void _calculateCommission(int therapistId) {
     double totalCommission = 0;
-    
-    // Find the therapist to get their commission rate
-    final therapist = therapists.firstWhere(
-      (t) => t['staff_id'] == therapistId,
-      orElse: () => {'commission_percentage': 30.0},
-    );
-    
-    // Get the commission rate from the database or use default
-    final commissionRate = (therapist['commission_percentage'] as num?)?.toDouble() ?? 30.0;
-    final rateDecimal = commissionRate / 100; // Convert from percentage to decimal
+    final commissionRate = 25.0; // Fixed at 25%
+    final rateDecimal = commissionRate / 100;
     
     if (therapistAppointments.containsKey(therapistId)) {
       for (var appointment in therapistAppointments[therapistId]!) {
@@ -118,33 +111,6 @@ class _ManageCommissionState extends State<ManageCommission> {
     setState(() {
       therapistCommissions[therapistId] = totalCommission;
     });
-  }
-
-  Future<void> _updateCommissionRate(int staffId, double newRate) async {
-    try {
-      await supabase
-          .from('staff')
-          .update({'commission_percentage': newRate})
-          .eq('staff_id', staffId);
-      
-      await _fetchStaff();
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Commission rate updated successfully'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      // Show error message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to update commission rate: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   Future<void> _selectDateRange(BuildContext context) async {
@@ -172,9 +138,6 @@ class _ManageCommissionState extends State<ManageCommission> {
   void _showTherapistDetails(BuildContext context, Map<String, dynamic> therapist) {
     final int therapistId = therapist['staff_id'];
     final List<Map<String, dynamic>> appointments = therapistAppointments[therapistId] ?? [];
-    final double commission = therapistCommissions[therapistId] ?? 0;
-    final commissionRate = (therapist['commission_percentage'] as num?)?.toDouble() ?? 30.0;
-    final commissionRateController = TextEditingController(text: commissionRate.toString());
     
     showDialog(
       context: context,
@@ -230,40 +193,6 @@ class _ManageCommissionState extends State<ManageCommission> {
                   ],
                 ),
                 SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: commissionRateController,
-                        decoration: InputDecoration(
-                          labelText: 'Commission Rate (%)',
-                          border: OutlineInputBorder(),
-                          suffixText: '%',
-                        ),
-                        keyboardType: TextInputType.numberWithOptions(decimal: true),
-                      ),
-                    ),
-                    SizedBox(width: 16),
-                    ElevatedButton(
-                      child: Text('Update Rate'),
-                      onPressed: () {
-                        // Parse and validate the new commission rate
-                        final newRate = double.tryParse(commissionRateController.text);
-                        if (newRate != null && newRate >= 0 && newRate <= 100) {
-                          _updateCommissionRate(therapistId, newRate);
-                          Navigator.of(context).pop();
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Please enter a valid commission rate between 0 and 100'),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                ),
                 Divider(height: 32),
                 Text(
                   'Completed Services',
@@ -280,7 +209,6 @@ class _ManageCommissionState extends State<ManageCommission> {
                             final servicePrice = appointment['service']['service_price'] as double? ?? 
                                 (appointment['service']['service_price'] is int ? 
                                     (appointment['service']['service_price'] as int).toDouble() : 0.0);
-                            final appointmentCommission = servicePrice * (commissionRate / 100);
                             
                             // Format booking time
                             String bookingTime = '';
@@ -300,13 +228,9 @@ class _ManageCommissionState extends State<ManageCommission> {
                                     Text('Appointment ID: ${appointment['book_id']}'),
                                   ],
                                 ),
-                                trailing: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text('\$${servicePrice.toStringAsFixed(2)}', style: TextStyle(fontWeight: FontWeight.bold)),
-                                    Text('Commission: \$${appointmentCommission.toStringAsFixed(2)}', style: TextStyle(color: Colors.green)),
-                                  ],
+                                trailing: Text(
+                                  '₱${servicePrice.toStringAsFixed(2)}', 
+                                  style: TextStyle(fontWeight: FontWeight.bold)
                                 ),
                                 isThreeLine: true,
                               ),
@@ -315,28 +239,87 @@ class _ManageCommissionState extends State<ManageCommission> {
                         ),
                 ),
                 Divider(),
+                // Add commission calculation summary
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Commission Calculation',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Service Value:'),
+                            Text(
+                              '₱${appointments.fold<double>(0, (sum, item) => sum + (item['service']['service_price'] as num).toDouble()).toStringAsFixed(2)}',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text('Commission Rate:'),
+                            Text(
+                              '25%',
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Divider(),
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(  // Changed from Row to Column
+                    crossAxisAlignment: CrossAxisAlignment.stretch,  // Make buttons full width
                     children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Total Services: ${appointments.length}', style: TextStyle(fontSize: 16)),
-                          Text(
-                            'Total Commission: \$${commission.toStringAsFixed(2)}',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-                          ),
-                        ],
+                      Text(
+                        'Total Services: ${appointments.length}', 
+                        style: TextStyle(fontSize: 16)
                       ),
-                      ElevatedButton(
-                        child: Text('Recalculate'),
+                      SizedBox(height: 8),  // Add spacing between text and buttons
+                      ElevatedButton.icon(
+                        icon: Icon(Icons.calculate, color: Colors.white),  // Ensure icon is white
+                        label: Text(
+                          'Calculate Commission',
+                          style: TextStyle(color: Colors.white),  // Ensure text is white
+                        ),
                         onPressed: () {
-                          _calculateCommission(therapistId);
-                          Navigator.of(context).pop();
-                          _showTherapistDetails(context, therapist);
+                          final total = appointments.fold<double>(
+                            0, 
+                            (sum, item) => sum + (item['service']['service_price'] as num).toDouble()
+                          );
+                          final commission = total * 0.25;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Total Services: ₱${total.toStringAsFixed(2)}\n'
+                                'Commission (25%): ₱${commission.toStringAsFixed(2)}'
+                              ),
+                              duration: Duration(seconds: 5),
+                            ),
+                          );
                         },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,  // Ensure all text/icons are white
+                        ),
+                      ),
+                      SizedBox(height: 8),  // Add spacing between buttons
+                      ElevatedButton(
+                        child: Text('Close'),
+                        onPressed: () => Navigator.of(context).pop(),
                       ),
                     ],
                   ),
@@ -378,9 +361,7 @@ class _ManageCommissionState extends State<ManageCommission> {
                       final therapist = therapists[index];
                       final therapistId = therapist['staff_id'];
                       final appointmentsCount = therapistAppointments[therapistId]?.length ?? 0;
-                      final commission = therapistCommissions[therapistId] ?? 0;
                       final status = therapist['status'] ?? 'Unknown';
-                      final commissionRate = (therapist['commission_percentage'] as num?)?.toDouble() ?? 30.0;
                       
                       return Card(
                         margin: EdgeInsets.symmetric(vertical: 8),
@@ -418,6 +399,21 @@ class _ManageCommissionState extends State<ManageCommission> {
                                           Container(
                                             padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                             decoration: BoxDecoration(
+                                              color: Colors.blue.shade100,
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              'Commission: 25%',
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: Colors.blue.shade800,
+                                              ),
+                                            ),
+                                          ),
+                                          SizedBox(width: 12),
+                                          Container(
+                                            padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                            decoration: BoxDecoration(
                                               color: status == 'Active' ? Colors.green.shade100 : 
                                                     status == 'Busy' ? Colors.orange.shade100 : Colors.grey.shade100,
                                               borderRadius: BorderRadius.circular(10),
@@ -436,20 +432,6 @@ class _ManageCommissionState extends State<ManageCommission> {
                                     ],
                                   ),
                                 ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      '\$${commission.toStringAsFixed(2)}',
-                                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.green),
-                                    ),
-                                    Text(
-                                      '${commissionRate.toStringAsFixed(1)}% rate',
-                                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                                    ),
-                                  ],
-                                ),
-                                SizedBox(width: 12),
                                 Icon(Icons.arrow_forward_ios, size: 16),
                               ],
                             ),

@@ -118,11 +118,13 @@ class _AdminAddManagerState extends State<AdminAddManager> {
 
   Future<void> _selectDate(BuildContext context) async {
     final currentYear = DateTime.now().year;
+    final minimumYear = currentYear - 18;  // Must be at least 18 years old
+    
     final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: _selectedDate ?? DateTime(currentYear - 25),
-      firstDate: DateTime(1950),
-      lastDate: DateTime(currentYear - 1), // Prevent selecting current year
+      initialDate: _selectedDate ?? DateTime(minimumYear - 5),  // Default to 23 years old
+      firstDate: DateTime(1940),
+      lastDate: DateTime(minimumYear),  // Cannot select dates less than 18 years ago
     );
     if (picked != null && picked != _selectedDate) {
       setState(() {
@@ -151,12 +153,18 @@ class _AdminAddManagerState extends State<AdminAddManager> {
                     ),
                     TextFormField(
                       controller: _firstNameController,
-                      decoration: InputDecoration(labelText: 'First Name'),
+                      decoration: InputDecoration(
+                        labelText: 'First Name',
+                        helperText: 'Only letters, spaces, and hyphens allowed',
+                      ),
                       validator: (value) => _validateName(value, 'First Name'),
                     ),
                     TextFormField(
                       controller: _lastNameController,
-                      decoration: InputDecoration(labelText: 'Last Name'),
+                      decoration: InputDecoration(
+                        labelText: 'Last Name',
+                        helperText: 'Only letters, spaces, and hyphens allowed',
+                      ),
                       validator: (value) => _validateName(value, 'Last Name'),
                     ),
                     TextFormField(

@@ -372,23 +372,35 @@ class _ManageSpaState extends State<ManageSpa> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text(isEditing ? 'Edit Service' : 'Add Service'),
+          title: Text(isEditing ? 'Edit Service Price' : 'Add Service'),
           content: SingleChildScrollView(
             child: Form(
               key: _serviceFormKey,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  TextFormField(
-                    controller: _serviceNameController,
-                    decoration: const InputDecoration(labelText: 'Service Name *'),
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter a service name';
-                      }
-                      return null;
-                    },
-                  ),
+                  if (isEditing)
+                    TextFormField(
+                      controller: _serviceNameController,
+                      enabled: false, // Make it read-only
+                      decoration: InputDecoration(
+                        labelText: 'Service Name',
+                        filled: true,
+                        fillColor: Colors.grey[200],
+                      ),
+                    )
+                  else
+                    TextFormField(
+                      controller: _serviceNameController,
+                      decoration: const InputDecoration(labelText: 'Service Name *'),
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter a service name';
+                        }
+                        return null;
+                      },
+                    ),
+                  SizedBox(height: 16),
                   TextFormField(
                     controller: _servicePriceController,
                     decoration: const InputDecoration(
@@ -412,9 +424,7 @@ class _ManageSpaState extends State<ManageSpa> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
               child: const Text('Cancel'),
             ),
             TextButton(
@@ -428,7 +438,7 @@ class _ManageSpaState extends State<ManageSpa> {
                   }
                 }
               },
-              child: Text(isEditing ? 'Update' : 'Add'),
+              child: Text(isEditing ? 'Update Price' : 'Add'),
             ),
           ],
         );

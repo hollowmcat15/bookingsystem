@@ -54,12 +54,10 @@ class _SignUpPageState extends State<SignUpPage> {
       return 'Birthday is required';
     }
     final now = DateTime.now();
-    if (date.year >= now.year) {
-      return 'Please select a valid birth year';
-    }
-    // Optional: Add minimum age requirement
-    if (now.year - date.year < 13) {
-      return 'You must be at least 13 years old';
+    final minimumYear = now.year - 18;  // Must be at least 18 years old
+    
+    if (date.year >= minimumYear) {
+      return 'Must be at least 18 years old';
     }
     return null;
   }
@@ -147,14 +145,16 @@ class _SignUpPageState extends State<SignUpPage> {
     }
   }
 
-  /// Modified date picker to prevent current year
+  /// Modified date picker with 5-year restriction
   void _pickBirthday() async {
     final currentYear = DateTime.now().year;
+    final minimumYear = currentYear - 18;  // Must be at least 18 years old
+    
     DateTime? pickedDate = await showDatePicker(
       context: context,
-      initialDate: DateTime(currentYear - 18), // Set default to 18 years ago
+      initialDate: DateTime(minimumYear - 5),  // Default to 23 years old
       firstDate: DateTime(1900),
-      lastDate: DateTime(currentYear - 1), // Prevent selecting current year
+      lastDate: DateTime(minimumYear),  // Cannot select dates less than 18 years ago
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
